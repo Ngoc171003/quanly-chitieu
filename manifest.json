@@ -1,0 +1,21 @@
+{
+  "name": "Chi Tiêu",
+  "short_name": "ChiTiêu",
+  "description": "Ứng dụng quản lý chi tiêu cá nhân với nhiều ví và PWA.",
+  "start_url": "./index.php",
+  "display": "standalone",
+  "background_color": "#0d6efd",
+  "theme_color": "#0d6efd",
+  "icons": [
+    {
+      "src": "public/images/icon-192.svg",
+      "sizes": "192x192",
+      "type": "image/svg+xml"
+    },
+    {
+      "src": "public/images/icon-512.svg",
+      "sizes": "512x512",
+      "type": "image/svg+xml"
+    }
+  ]
+}
