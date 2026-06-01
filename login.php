@@ -12,7 +12,11 @@ $error = '';
 $success = '';
 
 if ($_SERVER['REQUEST_METHOD'] == 'POST') {
-    $action = $_POST['action'] ?? 'login';
+    if (!isset($_POST['csrf_token']) || !verifyCsrfToken($_POST['csrf_token'])) {
+        $error = 'Yêu cầu không hợp lệ (CSRF Token invalid)!';
+    } else {
+        $action = $_POST['action'] ?? 'login';
+    }
     
     if ($action == 'login') {
         $login_key = trim($_POST['email'] ?? '');
@@ -95,7 +99,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                     }
                     
                     // Create default wallet for new user
-                    $wallet_query = "INSERT INTO wallets (user_id, name, balance) VALUES (?, 'Ví Tiền Mặt', 0)";
+                    $wallet_query = "INSERT INTO wallets (user_id, name, type, balance) VALUES (?, 'Ví Tiền Mặt', 'Tiền mặt', 0)";
                     $db->execute($wallet_query, [$user_id]);
                     
                     $success = 'Đăng ký thành công! Vui lòng đăng nhập.';
@@ -156,6 +160,7 @@ $page_title = 'Login - ' . APP_NAME;
                         <div class="tab-pane fade show active" id="login" role="tabpanel">
                             <form method="POST">
                                 <input type="hidden" name="action" value="login">
+                                <input type="hidden" name="csrf_token" value="<?php echo generateCsrfToken(); ?>">
                                 <div class="mb-3">
                                     <label class="form-label">Email hoặc Tên đăng nhập</label>
                                     <input type="text" name="email" class="form-control" placeholder="Email hoặc tên đăng nhập" required>
@@ -177,6 +182,7 @@ $page_title = 'Login - ' . APP_NAME;
                         <div class="tab-pane fade" id="register" role="tabpanel">
                             <form method="POST">
                                 <input type="hidden" name="action" value="register">
+                                <input type="hidden" name="csrf_token" value="<?php echo generateCsrfToken(); ?>">
                                 <div class="mb-3">
                                     <label class="form-label">Họ và tên</label>
                                     <input type="text" name="name" class="form-control" placeholder="Nguyen Van A" required>

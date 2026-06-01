@@ -281,7 +281,7 @@ function getUserCategories($user_id, $db, $type = null) {
  * Get user wallets
  */
 function getUserWallets($user_id, $db) {
-    $query = "SELECT id, name, balance FROM wallets WHERE user_id = ? ORDER BY name";
+    $query = "SELECT id, name, type, balance FROM wallets WHERE user_id = ? ORDER BY name";
     return $db->execute($query, [$user_id]);
 }
 
@@ -289,7 +289,7 @@ function getUserWallets($user_id, $db) {
  * Get wallet by id
  */
 function getWalletById($wallet_id, $user_id, $db) {
-    $query = "SELECT id, name, balance FROM wallets WHERE id = ? AND user_id = ? LIMIT 1";
+    $query = "SELECT id, name, type, balance FROM wallets WHERE id = ? AND user_id = ? LIMIT 1";
     $result = $db->execute($query, [$wallet_id, $user_id]);
     return $result && $result->num_rows > 0 ? $result->fetch_assoc() : null;
 }
@@ -309,3 +309,24 @@ function getBudgetInfo($user_id, $db, $month = null, $year = null) {
     
     return $result && $result->num_rows > 0 ? $result->fetch_assoc() : null;
 }
+
+/**
+ * Generate CSRF token if it does not exist, and return it
+ */
+function generateCsrfToken() {
+    if (empty($_SESSION['csrf_token'])) {
+        $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
+    }
+    return $_SESSION['csrf_token'];
+}
+
+/**
+ * Verify CSRF token
+ */
+function verifyCsrfToken($token) {
+    if (!isset($_SESSION['csrf_token']) || empty($token)) {
+        return false;
+    }
+    return hash_equals($_SESSION['csrf_token'], $token);
+}
+

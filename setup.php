@@ -167,6 +167,44 @@
 
             $mysqli->close();
         }
+
+        // Check if demo import was requested
+        $demo_imported = false;
+        if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['import_demo_data'])) {
+            $mysqli = new mysqli($db_host, $db_user, $db_pass, $db_name);
+            if ($mysqli->connect_error) {
+                $errors[] = "✗ Lỗi kết nối MySQL khi import dữ liệu mẫu: " . $mysqli->connect_error;
+            } else {
+                $test_data_file = __DIR__ . '/database/test_data.sql';
+                if (file_exists($test_data_file)) {
+                    $sql = file_get_contents($test_data_file);
+                    
+                    // Split SQL statements
+                    $statements = array_filter(array_map('trim', preg_split('/;(?=\s|$)/', $sql)));
+                    
+                    $imported = 0;
+                    $mysqli->query("SET FOREIGN_KEY_CHECKS = 0;");
+                    foreach ($statements as $statement) {
+                        if (!empty($statement) && !preg_match('/^--/', $statement)) {
+                            if ($mysqli->query($statement)) {
+                                $imported++;
+                            } else {
+                                $errors[] = "✗ Lỗi SQL khi import: " . $mysqli->error;
+                            }
+                        }
+                    }
+                    $mysqli->query("SET FOREIGN_KEY_CHECKS = 1;");
+                    
+                    if (empty($errors)) {
+                        $success_messages[] = "✓ Dữ liệu mẫu đã được khởi tạo thành công!";
+                        $demo_imported = true;
+                    }
+                } else {
+                    $errors[] = "✗ Không tìm thấy file test_data.sql";
+                }
+                $mysqli->close();
+            }
+        }
         ?>
 
         <!-- Status Messages -->
@@ -209,7 +247,7 @@ define('DB_NAME', 'chi_tieu_ca_nhan');
             <h5><span class="step-number">3</span>Tài Khoản Demo</h5>
             <p>Sau khi cài đặt, sử dụng tài khoản demo:</p>
             <div class="code-block">
-Email: nguyenA@gmail.com<br>
+Email: ngongoc@gmail.com<br>
 Mật khẩu: 123456
             </div>
         </div>
@@ -227,9 +265,18 @@ http://localhost/Myproject/
             <i class="fas fa-check-circle"></i> 
             <strong>Tuyệt vời!</strong> Cài đặt hoàn tất. Bạn có thể đăng nhập ngay.
         </div>
-        <a href="login.php" class="btn btn-primary">
-            <i class="fas fa-sign-in-alt"></i> Đi đến Đăng Nhập
-        </a>
+        <div class="d-flex flex-column gap-2">
+            <a href="login.php" class="btn btn-primary w-100">
+                <i class="fas fa-sign-in-alt"></i> Đi đến Đăng Nhập
+            </a>
+            <?php if (!$demo_imported): ?>
+            <form method="POST" class="w-100">
+                <button type="submit" name="import_demo_data" class="btn btn-outline-success w-100">
+                    <i class="fas fa-database"></i> Khởi tạo Dữ liệu Mẫu (Demo Data)
+                </button>
+            </form>
+            <?php endif; ?>
+        </div>
         <?php else: ?>
         <div class="alert alert-warning mt-3">
             <i class="fas fa-exclamation-circle"></i> 

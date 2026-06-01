@@ -23,8 +23,11 @@ $selected_type = strtolower($_GET['type'] ?? '');
 $wallets = getUserWallets($user_id, $db);
 
 if ($_SERVER['REQUEST_METHOD'] == 'POST') {
-    $category_id = intval($_POST['category_id'] ?? 0);
-    $wallet_id = intval($_POST['wallet_id'] ?? 0);
+    if (!isset($_POST['csrf_token']) || !verifyCsrfToken($_POST['csrf_token'])) {
+        $error = 'Yêu cầu không hợp lệ (CSRF Token invalid)!';
+    } else {
+        $category_id = intval($_POST['category_id'] ?? 0);
+        $wallet_id = intval($_POST['wallet_id'] ?? 0);
     $amount = floatval($_POST['amount'] ?? 0);
     $transaction_date = trim($_POST['transaction_date'] ?? '');
     $note = trim($_POST['note'] ?? '');
@@ -106,6 +109,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
         }
     }
 }
+}
 
 // Get categories with proper filtering
 $categories = getUserCategories($user_id, $db, $selected_type);
@@ -140,6 +144,7 @@ $page_title = ($trans_id ? 'Sửa' : 'Thêm') . ' Giao Dịch - ' . APP_NAME;
                 <?php endif; ?>
 
                 <form method="POST">
+                    <input type="hidden" name="csrf_token" value="<?php echo generateCsrfToken(); ?>">
                     <div class="mb-3">
                         <label class="form-label">Danh Mục <span class="text-danger">*</span></label>
                         <select name="category_id" class="form-select" required>

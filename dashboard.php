@@ -32,10 +32,10 @@ $wallet_cash_total = 0;
 $wallet_account_total = 0;
 $wallet_savings_total = 0;
 foreach ($wallets as $w) {
-    $wallet_name_lower = mb_strtolower($w['name'], 'UTF-8');
-    if (strpos($wallet_name_lower, 'tiền mặt') !== false || strpos($wallet_name_lower, 'tien mat') !== false) {
+    $wallet_type = $w['type'] ?? 'Tiền mặt';
+    if ($wallet_type === 'Tiền mặt') {
         $wallet_cash_total += floatval($w['balance']);
-    } elseif (strpos($wallet_name_lower, 'tiết kiệm') !== false || strpos($wallet_name_lower, 'tiet kiem') !== false) {
+    } elseif ($wallet_type === 'Tiết kiệm') {
         $wallet_savings_total += floatval($w['balance']);
     } else {
         $wallet_account_total += floatval($w['balance']);

@@ -16,49 +16,60 @@ if ($wallet_id) {
 }
 
 if ($_SERVER['REQUEST_METHOD'] == 'POST') {
-    $name = trim($_POST['name'] ?? '');
-    $balance = floatval($_POST['balance'] ?? 0);
-
-    if (empty($name)) {
-        $error = 'Vui lòng nhập tên ví!';
+    if (!isset($_POST['csrf_token']) || !verifyCsrfToken($_POST['csrf_token'])) {
+        $error = 'Yêu cầu không hợp lệ (CSRF Token invalid)!';
     } else {
-        if ($wallet_id && $wallet) {
-            $update = "UPDATE wallets SET name = ?, balance = ? WHERE id = ? AND user_id = ?";
-            $result = $db->execute($update, [$name, $balance, $wallet_id, $user_id]);
-            if ($result !== false && $db->affectedRows() >= 0) {
-                $success = 'Ví đã được cập nhật!';
-                header('Refresh: 1; URL=' . BASE_URL . 'wallets.php');
-            } else {
-                $error = 'Có lỗi khi cập nhật ví!';
-            }
+        $name = trim($_POST['name'] ?? '');
+        $type = trim($_POST['type'] ?? 'Tiền mặt');
+        $balance = floatval($_POST['balance'] ?? 0);
+
+        if (empty($name)) {
+            $error = 'Vui lòng nhập tên ví!';
+        } elseif (!in_array($type, ['Tiền mặt', 'Tài khoản ngân hàng', 'Tiết kiệm'])) {
+            $error = 'Loại ví không hợp lệ!';
         } else {
-            $insert = "INSERT INTO wallets (user_id, name, balance) VALUES (?, ?, ?)";
-            $result = $db->execute($insert, [$user_id, $name, $balance]);
-            if ($result !== false) {
-                $success = 'Ví đã được tạo!';
-                header('Refresh: 1; URL=' . BASE_URL . 'wallets.php');
+            if ($wallet_id && $wallet) {
+                $update = "UPDATE wallets SET name = ?, type = ?, balance = ? WHERE id = ? AND user_id = ?";
+                $result = $db->execute($update, [$name, $type, $balance, $wallet_id, $user_id]);
+                if ($result !== false && $db->affectedRows() >= 0) {
+                    $success = 'Ví đã được cập nhật!';
+                    header('Refresh: 1; URL=' . BASE_URL . 'wallets.php');
+                } else {
+                    $error = 'Có lỗi khi cập nhật ví!';
+                }
             } else {
-                $error = 'Có lỗi khi tạo ví!';
+                $insert = "INSERT INTO wallets (user_id, name, type, balance) VALUES (?, ?, ?, ?)";
+                $result = $db->execute($insert, [$user_id, $name, $type, $balance]);
+                if ($result !== false) {
+                    $success = 'Ví đã được tạo!';
+                    header('Refresh: 1; URL=' . BASE_URL . 'wallets.php');
+                } else {
+                    $error = 'Có lỗi khi tạo ví!';
+                }
             }
         }
     }
 }
 
 if (isset($_GET['action']) && $_GET['action'] == 'delete' && $wallet_id) {
-    $checkTransactions = "SELECT COUNT(*) as total FROM transactions WHERE wallet_id = ? AND user_id = ?";
-    $checkResult = $db->execute($checkTransactions, [$wallet_id, $user_id]);
-    $total = $checkResult ? intval($checkResult->fetch_assoc()['total']) : 0;
-    if ($total > 0) {
-        $error = 'Không thể xóa ví đang có giao dịch. Vui lòng di chuyển hoặc xóa giao dịch trước.';
+    if (!isset($_GET['csrf_token']) || !verifyCsrfToken($_GET['csrf_token'])) {
+        $error = 'Yêu cầu không hợp lệ (CSRF Token invalid)!';
     } else {
-        $delete = "DELETE FROM wallets WHERE id = ? AND user_id = ?";
-        $deleteResult = $db->execute($delete, [$wallet_id, $user_id]);
-        if ($deleteResult !== false) {
-            $success = 'Ví đã được xóa!';
-            header('Refresh: 1; URL=' . BASE_URL . 'wallets.php');
-            exit;
+        $checkTransactions = "SELECT COUNT(*) as total FROM transactions WHERE wallet_id = ? AND user_id = ?";
+        $checkResult = $db->execute($checkTransactions, [$wallet_id, $user_id]);
+        $total = $checkResult ? intval($checkResult->fetch_assoc()['total']) : 0;
+        if ($total > 0) {
+            $error = 'Không thể xóa ví đang có giao dịch. Vui lòng di chuyển hoặc xóa giao dịch trước.';
         } else {
-            $error = 'Có lỗi khi xóa ví!';
+            $delete = "DELETE FROM wallets WHERE id = ? AND user_id = ?";
+            $deleteResult = $db->execute($delete, [$wallet_id, $user_id]);
+            if ($deleteResult !== false) {
+                $success = 'Ví đã được xóa!';
+                header('Refresh: 1; URL=' . BASE_URL . 'wallets.php');
+                exit;
+            } else {
+                $error = 'Có lỗi khi xóa ví!';
+            }
         }
     }
 }
@@ -91,11 +102,20 @@ $page_title = 'Ví - ' . APP_NAME;
                 <?php endif; ?>
 
                 <form method="POST" class="row g-3">
-                    <div class="col-md-8">
+                    <input type="hidden" name="csrf_token" value="<?php echo generateCsrfToken(); ?>">
+                    <div class="col-md-5">
                         <label class="form-label">Tên Ví <span class="text-danger">*</span></label>
                         <input type="text" name="name" class="form-control" value="<?php echo $wallet ? e($wallet['name']) : ''; ?>" required>
                     </div>
                     <div class="col-md-4">
+                        <label class="form-label">Loại Ví <span class="text-danger">*</span></label>
+                        <select name="type" class="form-select" required>
+                            <option value="Tiền mặt" <?php echo ($wallet && $wallet['type'] == 'Tiền mặt') ? 'selected' : ''; ?>>Tiền mặt</option>
+                            <option value="Tài khoản ngân hàng" <?php echo ($wallet && $wallet['type'] == 'Tài khoản ngân hàng') ? 'selected' : ''; ?>>Tài khoản ngân hàng</option>
+                            <option value="Tiết kiệm" <?php echo ($wallet && $wallet['type'] == 'Tiết kiệm') ? 'selected' : ''; ?>>Tiết kiệm</option>
+                        </select>
+                    </div>
+                    <div class="col-md-3">
                         <label class="form-label">Số Dư Ban Đầu</label>
                         <div class="input-group">
                             <input type="number" min="0" step="0.01" name="balance" class="form-control" value="<?php echo $wallet ? e($wallet['balance']) : '0'; ?>">
@@ -124,6 +144,7 @@ $page_title = 'Ví - ' . APP_NAME;
                         <thead class="table-light">
                             <tr>
                                 <th>Tên Ví</th>
+                                <th>Loại Ví</th>
                                 <th class="text-end">Số Dư</th>
                                 <th class="text-center">Hành Động</th>
                             </tr>
@@ -131,18 +152,19 @@ $page_title = 'Ví - ' . APP_NAME;
                         <tbody>
                             <?php if ($wallets->num_rows == 0): ?>
                             <tr>
-                                <td colspan="3" class="text-center py-4 text-muted">Chưa có ví nào. Hãy tạo ví để bắt đầu.</td>
+                                <td colspan="4" class="text-center py-4 text-muted">Chưa có ví nào. Hãy tạo ví để bắt đầu.</td>
                             </tr>
                             <?php else: ?>
                                 <?php while ($item = $wallets->fetch_assoc()): ?>
                                 <tr>
                                     <td><?php echo e($item['name']); ?></td>
+                                    <td><span class="badge bg-info text-white"><?php echo e($item['type'] ?? 'Tiền mặt'); ?></span></td>
                                     <td class="text-end"><?php echo formatCurrency($item['balance']); ?></td>
                                     <td class="text-center">
                                         <a href="<?php echo BASE_URL; ?>wallets.php?id=<?php echo $item['id']; ?>" class="btn btn-sm btn-outline-primary" title="Sửa">
                                             <i class="fas fa-edit"></i>
                                         </a>
-                                         <a href="<?php echo BASE_URL; ?>wallets.php?action=delete&id=<?php echo $item['id']; ?>" class="btn btn-sm btn-outline-danger" onclick="return confirm('Bạn chắc chắn muốn xóa ví này chứ?');" title="Xóa">
+                                         <a href="<?php echo BASE_URL; ?>wallets.php?action=delete&id=<?php echo $item['id']; ?>&csrf_token=<?php echo generateCsrfToken(); ?>" class="btn btn-sm btn-outline-danger" onclick="return confirm('Bạn chắc chắn muốn xóa ví này chứ?');" title="Xóa">
                                             <i class="fas fa-trash"></i>
                                         </a>
                                     </td>

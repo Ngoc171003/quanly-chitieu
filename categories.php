@@ -11,16 +11,20 @@ $success = '';
 
 // Handle delete
 if (isset($_GET['action']) && $_GET['action'] == 'delete') {
-    $cat_id = intval($_GET['id'] ?? 0);
-    // Check if category has no transactions
-    $check = "SELECT id FROM transactions WHERE category_id = ? LIMIT 1";
-    $check_result = $db->execute($check, [$cat_id]);
-    if ($check_result && $check_result->num_rows == 0) {
-        $delete = "DELETE FROM categories WHERE id = ? AND user_id = ?";
-        $db->execute($delete, [$cat_id, $user_id]);
-        $success = 'Danh mục đã được xóa!';
+    if (!isset($_GET['csrf_token']) || !verifyCsrfToken($_GET['csrf_token'])) {
+        $error = 'Yêu cầu không hợp lệ (CSRF Token invalid)!';
     } else {
-        $error = 'Không thể xóa danh mục đang có giao dịch!';
+        $cat_id = intval($_GET['id'] ?? 0);
+        // Check if category has no transactions
+        $check = "SELECT id FROM transactions WHERE category_id = ? LIMIT 1";
+        $check_result = $db->execute($check, [$cat_id]);
+        if ($check_result && $check_result->num_rows == 0) {
+            $delete = "DELETE FROM categories WHERE id = ? AND user_id = ?";
+            $db->execute($delete, [$cat_id, $user_id]);
+            $success = 'Danh mục đã được xóa!';
+        } else {
+            $error = 'Không thể xóa danh mục đang có giao dịch!';
+        }
     }
 }
 
@@ -36,9 +40,12 @@ if ($edit_id) {
 
 // Handle add/edit category
 if ($_SERVER['REQUEST_METHOD'] == 'POST') {
-    $name = trim($_POST['name'] ?? '');
-    $type = trim($_POST['type'] ?? '');
-    $cat_id = intval($_POST['category_id'] ?? 0);
+    if (!isset($_POST['csrf_token']) || !verifyCsrfToken($_POST['csrf_token'])) {
+        $error = 'Yêu cầu không hợp lệ (CSRF Token invalid)!';
+    } else {
+        $name = trim($_POST['name'] ?? '');
+        $type = trim($_POST['type'] ?? '');
+        $cat_id = intval($_POST['category_id'] ?? 0);
     
     if (empty($name)) {
         $error = 'Tên danh mục không được trống!';
@@ -64,6 +71,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                 header('Refresh: 1; URL=' . BASE_URL . 'categories.php');
             } else {
                 $error = 'Danh mục này đã tồn tại!';
+            }
             }
         }
     }
@@ -105,6 +113,7 @@ $page_title = 'Danh Mục - ' . APP_NAME;
             </div>
             <div class="card-body">
                 <form method="POST">
+                    <input type="hidden" name="csrf_token" value="<?php echo generateCsrfToken(); ?>">
                     <?php if ($edit_cat): ?>
                         <input type="hidden" name="category_id" value="<?php echo $edit_cat['id']; ?>">
                     <?php endif; ?>
@@ -160,7 +169,7 @@ $page_title = 'Danh Mục - ' . APP_NAME;
                                        class="btn btn-sm btn-outline-primary me-1" title="Sửa">
                                         <i class="fas fa-edit"></i>
                                     </a>
-                                     <a href="<?php echo BASE_URL; ?>categories.php?action=delete&id=<?php echo $cat['id']; ?>" 
+                                     <a href="<?php echo BASE_URL; ?>categories.php?action=delete&id=<?php echo $cat['id']; ?>&csrf_token=<?php echo generateCsrfToken(); ?>" 
                                         class="btn btn-sm btn-outline-danger" onclick="return confirm('Bạn chắc chắn muốn xóa danh mục này chứ?');" title="Xóa">
                                         <i class="fas fa-trash"></i>
                                     </a>

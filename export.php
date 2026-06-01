@@ -30,6 +30,7 @@ $page_title = 'Xuất Dữ Liệu - ' . APP_NAME;
                 <p class="text-muted">Xuất dữ liệu giao dịch của bạn ra file CSV để sử dụng trong Excel hoặc các ứng dụng khác.</p>
                 
                 <form method="POST" action="<?php echo BASE_URL; ?>api/export.php">
+                    <input type="hidden" name="csrf_token" value="<?php echo generateCsrfToken(); ?>">
                     <div class="row">
                         <div class="col-md-6">
                             <label class="form-label"><i class="fas fa-calendar"></i> Tháng <span class="text-danger">*</span></label>

@@ -12,8 +12,11 @@ $month = isset($_GET['month']) ? intval($_GET['month']) : date('m');
 $year = isset($_GET['year']) ? intval($_GET['year']) : date('Y');
 
 if ($_SERVER['REQUEST_METHOD'] == 'POST') {
-    $month = intval($_POST['month'] ?? $month);
-    $year = intval($_POST['year'] ?? $year);
+    if (!isset($_POST['csrf_token']) || !verifyCsrfToken($_POST['csrf_token'])) {
+        $error = 'Yêu cầu không hợp lệ (CSRF Token invalid)!';
+    } else {
+        $month = intval($_POST['month'] ?? $month);
+        $year = intval($_POST['year'] ?? $year);
     $amount = floatval($_POST['amount'] ?? 0);
     
     if ($amount <= 0) {
@@ -41,6 +44,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             }
         }
     }
+}
 }
 
 // Get current budget using parameterized query
@@ -97,6 +101,7 @@ $page_title = 'Ngân Sách - ' . APP_NAME;
             </div>
             <div class="card-body">
                 <form method="POST">
+                    <input type="hidden" name="csrf_token" value="<?php echo generateCsrfToken(); ?>">
                     <div class="mb-3">
                         <label class="form-label">Tháng <span class="text-danger">*</span></label>
                         <select name="month" id="budgetMonth" class="form-select" onchange="changeBudgetPeriod()" required>

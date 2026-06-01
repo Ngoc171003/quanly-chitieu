@@ -5,6 +5,10 @@ require_once '../app/functions.php';
 
 requireAuth($db);
 
+if ($_SERVER['REQUEST_METHOD'] !== 'POST' || !isset($_POST['csrf_token']) || !verifyCsrfToken($_POST['csrf_token'])) {
+    die("Yêu cầu không hợp lệ (CSRF Token invalid)!");
+}
+
 $user_id = $_SESSION['user_id'];
 
 $month = intval($_POST['month'] ?? date('m'));

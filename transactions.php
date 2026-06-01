@@ -14,19 +14,24 @@ $filter_date_to = $_GET['date_to'] ?? '';
 
 // Handle delete
 if (isset($_GET['action']) && $_GET['action'] == 'delete' && isset($_GET['id'])) {
-    $trans_id = intval($_GET['id']);
-    $check = "SELECT t.id, t.amount, t.wallet_id, c.type FROM transactions t
-              JOIN categories c ON t.category_id = c.id
-              WHERE t.id = ? AND t.user_id = ?";
-    $check_result = $db->execute($check, [$trans_id, $user_id]);
-    if ($check_result && $check_result->num_rows > 0) {
-        $data = $check_result->fetch_assoc();
-        $wallet_effect = strtolower($data['type']) === 'thu' ? -floatval($data['amount']) : floatval($data['amount']);
-        $db->execute("UPDATE wallets SET balance = balance + ? WHERE id = ? AND user_id = ?", [$wallet_effect, $data['wallet_id'], $user_id]);
-        $delete_query = "DELETE FROM transactions WHERE id = ? AND user_id = ?";
-        $db->execute($delete_query, [$trans_id, $user_id]);
-        header('Location: ' . BASE_URL . 'transactions.php?deleted=1');
+    if (!isset($_GET['csrf_token']) || !verifyCsrfToken($_GET['csrf_token'])) {
+        header('Location: ' . BASE_URL . 'transactions.php?error=csrf');
         exit;
+    } else {
+        $trans_id = intval($_GET['id']);
+        $check = "SELECT t.id, t.amount, t.wallet_id, c.type FROM transactions t
+                  JOIN categories c ON t.category_id = c.id
+                  WHERE t.id = ? AND t.user_id = ?";
+        $check_result = $db->execute($check, [$trans_id, $user_id]);
+        if ($check_result && $check_result->num_rows > 0) {
+            $data = $check_result->fetch_assoc();
+            $wallet_effect = strtolower($data['type']) === 'thu' ? -floatval($data['amount']) : floatval($data['amount']);
+            $db->execute("UPDATE wallets SET balance = balance + ? WHERE id = ? AND user_id = ?", [$wallet_effect, $data['wallet_id'], $user_id]);
+            $delete_query = "DELETE FROM transactions WHERE id = ? AND user_id = ?";
+            $db->execute($delete_query, [$trans_id, $user_id]);
+            header('Location: ' . BASE_URL . 'transactions.php?deleted=1');
+            exit;
+        }
     }
 }
 
@@ -123,6 +128,13 @@ $page_title = 'Giao Dịch - ' . APP_NAME;
 </div>
 <?php endif; ?>
 
+<?php if (isset($_GET['error']) && $_GET['error'] == 'csrf'): ?>
+<div class="alert alert-danger alert-dismissible fade show" role="alert">
+    <i class="fas fa-exclamation-triangle"></i> Yêu cầu không hợp lệ (CSRF Token invalid)!
+    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+</div>
+<?php endif; ?>
+
 <!-- Transactions Table -->
 <div class="card border-0 shadow-sm">
     <div class="card-body p-0">
@@ -169,7 +181,7 @@ $page_title = 'Giao Dịch - ' . APP_NAME;
                                    class="btn btn-sm btn-outline-primary" title="Sửa">
                                     <i class="fas fa-edit"></i>
                                 </a>
-                                <a href="<?php echo BASE_URL; ?>transactions.php?action=delete&id=<?php echo $trans['id']; ?>" 
+                                <a href="<?php echo BASE_URL; ?>transactions.php?action=delete&id=<?php echo $trans['id']; ?>&csrf_token=<?php echo generateCsrfToken(); ?>" 
                                    class="btn btn-sm btn-outline-danger" onclick="return confirm('Bạn chắc chắn muốn xóa giao dịch này chứ?');" title="Xóa">
                                     <i class="fas fa-trash"></i>
                                 </a>

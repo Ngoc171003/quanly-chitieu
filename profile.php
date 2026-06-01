@@ -21,9 +21,12 @@ if (!$user) {
 }
 
 if ($_SERVER['REQUEST_METHOD'] == 'POST') {
-    $action = $_POST['action'] ?? '';
-    
-    if ($action == 'profile') {
+    if (!isset($_POST['csrf_token']) || !verifyCsrfToken($_POST['csrf_token'])) {
+        $error = 'Yêu cầu không hợp lệ (CSRF Token invalid)!';
+    } else {
+        $action = $_POST['action'] ?? '';
+        
+        if ($action == 'profile') {
         $name = trim($_POST['name'] ?? '');
         $email = trim($_POST['email'] ?? '');
         
@@ -72,6 +75,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             }
         }
     }
+}
 }
 
 $page_title = 'Hồ Sơ - ' . APP_NAME;
@@ -137,6 +141,7 @@ $page_title = 'Hồ Sơ - ' . APP_NAME;
                     <div class="card-body">
                         <form method="POST">
                             <input type="hidden" name="action" value="profile">
+                            <input type="hidden" name="csrf_token" value="<?php echo generateCsrfToken(); ?>">
                             <div class="mb-3">
                                 <label class="form-label">Họ và Tên <span class="text-danger">*</span></label>
                                 <input type="text" name="name" class="form-control" value="<?php echo e($user['full_name']); ?>" required>
@@ -159,6 +164,7 @@ $page_title = 'Hồ Sơ - ' . APP_NAME;
                     <div class="card-body">
                         <form method="POST">
                             <input type="hidden" name="action" value="password">
+                            <input type="hidden" name="csrf_token" value="<?php echo generateCsrfToken(); ?>">
                             <div class="mb-3">
                                 <label class="form-label">Mật Khẩu Hiện Tại <span class="text-danger">*</span></label>
                                 <input type="password" name="current_password" class="form-control" required>
