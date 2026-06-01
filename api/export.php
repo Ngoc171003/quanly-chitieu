@@ -19,7 +19,7 @@ $query = "SELECT t.id, t.transaction_date, c.name as category_name, c.type as ca
           JOIN categories c ON t.category_id = c.id
           WHERE t.user_id = ?
           AND t.transaction_date BETWEEN ? AND ?
-          ORDER BY t.transaction_date DESC";
+          ORDER BY t.transaction_date ASC";
 
 $transactions = $db->execute($query, [$user_id, $start_date, $end_date]);
 
@@ -35,13 +35,14 @@ fprintf($output, chr(0xEF).chr(0xBB).chr(0xBF));
 // Header row
 fputcsv($output, ['Ngày', 'Danh Mục', 'Loại', 'Số Tiền', 'Ghi Chú'], ',');
 
-// Data rows
+// Data rows (format date as DD/MM/YYYY for Excel-friendly display)
 while ($trans = $transactions->fetch_assoc()) {
+    $date_formatted = date('d/m/Y', strtotime($trans['transaction_date']));
     fputcsv($output, [
-        $trans['transaction_date'],
+        $date_formatted,
         $trans['category_name'],
         strtolower($trans['category_type']) == 'thu' ? 'Thu' : 'Chi',
-        $trans['amount'],
+        number_format($trans['amount'], 0, '.', '.') . ' ' . CURRENCY,
         $trans['note'] ?? ''
     ], ',');
 }
@@ -50,9 +51,9 @@ while ($trans = $transactions->fetch_assoc()) {
 fputcsv($output, [], ',');
 $dashboard = getDashboardData($user_id, $db, $month, $year);
 fputcsv($output, ['TỔNG HỢP', '', '', '', ''], ',');
-fputcsv($output, ['Tổng Thu', '', '', $dashboard['income'], ''], ',');
-fputcsv($output, ['Tổng Chi', '', '', $dashboard['expenses'], ''], ',');
-fputcsv($output, ['Số Dư', '', '', $dashboard['balance'], ''], ',');
+fputcsv($output, ['Tổng Thu', '', '', number_format($dashboard['income'], 0, '.', '.') . ' ' . CURRENCY, ''], ',');
+fputcsv($output, ['Tổng Chi', '', '', number_format($dashboard['expenses'], 0, '.', '.') . ' ' . CURRENCY, ''], ',');
+fputcsv($output, ['Số Dư', '', '', number_format($dashboard['balance'] ?? ($dashboard['income'] - $dashboard['expenses']), 0, '.', '.') . ' ' . CURRENCY, ''], ',');
 
 fclose($output);
 exit;

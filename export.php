@@ -3,7 +3,7 @@ require_once 'app/config.php';
 require_once 'app/Database.php';
 require_once 'app/functions.php';
 
-requireAuth($db);
+requireAuth();
 
 $user_id = $_SESSION['user_id'];
 $month = date('m');
@@ -53,7 +53,7 @@ $page_title = 'Xuất Dữ Liệu - ' . APP_NAME;
                         </div>
                     </div>
 
-                    <div class="alert alert-info mt-4 mb-4">
+                    <div class="alert alert-info mt-4 mb-4" role="alert">
                         <i class="fas fa-info-circle"></i> 
                         <strong>Thông tin:</strong> File CSV sẽ bao gồm tất cả giao dịch, tổng hợp thu chi và số dư của tháng bạn chọn.
                     </div>

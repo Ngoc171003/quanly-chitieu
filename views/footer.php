@@ -1,15 +1,10 @@
     </main>
 
     <?php if (isAuthenticated()): ?>
-    <footer class="bg-light py-4 mt-5 border-top">
+    <footer class="bg-light py-2 mt-5 border-top footer-minimal">
         <div class="container-fluid">
-            <div class="row">
-                <div class="col-md-6">
-                    <p class="text-muted mb-0">&copy; 2026 <?php echo APP_NAME; ?>. All rights reserved.</p>
-                </div>
-                <div class="col-md-6 text-end">
-                    <p class="text-muted mb-0">v1.0 | Designed for personal finance management</p>
-                </div>
+            <div class="text-center text-muted">
+                &copy; 2026 <?php echo APP_NAME; ?> | v1.0
             </div>
         </div>
     </footer>

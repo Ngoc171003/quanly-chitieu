@@ -84,6 +84,51 @@ body {
     box-shadow: var(--shadow-hover) !important;
 }
 
+/* Metric Cards */
+.row.mb-4 .card {
+    min-height: 180px;
+}
+
+.card h3 {
+    font-size: 1.75rem;
+    font-weight: 800;
+    margin-top: 0.5rem;
+}
+
+.card .badge {
+    font-size: 1.35rem;
+    width: 70px;
+    height: 70px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 0.95;
+}
+
+.card .badge i {
+    font-size: 1.85rem;
+}
+
+.text-success {
+    color: var(--success-color) !important;
+}
+
+.text-danger {
+    color: var(--danger-color) !important;
+}
+
+.text-warning {
+    color: var(--warning-color) !important;
+}
+
+.text-info {
+    color: var(--info-color) !important;
+}
+
+.text-primary {
+    color: var(--primary-color) !important;
+}
+
 .card-header {
     border-radius: 24px 24px 0 0 !important;
     font-weight: 700;
@@ -194,17 +239,39 @@ body {
 }
 
 .badge.bg-success {
-    background: #2a7f61 !important;
-    color: #ffffff !important;
-    font-weight: 700 !important;
-    box-shadow: 0 4px 12px rgba(42, 127, 97, 0.2);
+    background: rgba(69, 196, 159, 0.2) !important;
+    color: #2a7f61 !important;
 }
 
 .badge.bg-danger {
-    background: #d64545 !important;
-    color: #ffffff !important;
-    font-weight: 700 !important;
-    box-shadow: 0 4px 12px rgba(214, 69, 69, 0.2);
+    background: rgba(255, 107, 107, 0.2) !important;
+    color: #d64545 !important;
+}
+
+.badge.bg-warning {
+    background: rgba(255, 178, 107, 0.2) !important;
+    color: #c97a1a !important;
+}
+
+.badge.bg-info {
+    background: rgba(125, 199, 255, 0.2) !important;
+    color: #0f4f7d !important;
+}
+
+.badge.bg-primary {
+    background: rgba(79, 139, 255, 0.2) !important;
+    color: #0052a3 !important;
+}
+
+/* Metric Card Badges */
+.card .badge.rounded-circle {
+    padding: 0 !important;
+    width: 70px;
+    height: 70px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 8px 20px rgba(79, 139, 255, 0.12);
 }
 
 /* Progress Bar */
@@ -247,19 +314,20 @@ body {
     color: #0f4f7d;
 }
 
-.alert-success {
-    background-color: #d4edda;
-    color: #155724;
-}
-
-.alert-danger {
-    background-color: #f8d7da;
-    color: #721c24;
-}
-
 .alert-warning {
-    background-color: #fff3cd;
-    color: #856404;
+    background-color: rgba(255, 178, 107, 0.12);
+    color: #a56319;
+}
+
+/* Budget section enhancements */
+.card-body strong {
+    color: var(--text-color);
+    font-weight: 700;
+}
+
+.card-body .text-end p {
+    line-height: 1.8;
+    margin-bottom: 0.25rem !important;
 }
 
 .alert-info {
@@ -543,4 +611,121 @@ canvas {
     font-size: 3rem;
     margin-bottom: 1rem;
     opacity: 0.5;
+}
+
+/* Dashboard Improvements */
+
+/* Primary Card */
+.card-primary {
+    background: linear-gradient(135deg, rgba(255, 178, 107, 0.08) 0%, rgba(255, 178, 107, 0.04) 100%);
+    border: 1px solid rgba(255, 178, 107, 0.2) !important;
+}
+
+.card-primary .card-body {
+    padding: 2rem;
+}
+
+/* Dashboard filter controls (Month / Year / Export) */
+.dashboard-filters {
+    gap: 0.75rem !important;
+}
+.dashboard-filters .flex-grow-1 {
+    flex: 1 1 0;
+    min-width: 0;
+}
+.dashboard-filters .form-select {
+    min-width: 140px;
+    height: 44px;
+    padding: 0.45rem 0.75rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+}
+.dashboard-filters .export-btn {
+    height: 44px;
+    padding: 0 0.9rem;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    white-space: nowrap;
+}
+
+@media (max-width: 768px) {
+    .dashboard-filters .form-select {
+        min-width: 100px;
+        height: 42px;
+    }
+    .dashboard-filters .export-btn {
+        height: 42px;
+    }
+}
+
+/* Transaction List */
+.transaction-list .transaction-item {
+    transition: all 0.3s ease;
+    border-left: 4px solid transparent;
+}
+
+.transaction-list .transaction-item:hover {
+    background-color: rgba(79, 139, 255, 0.04);
+    border-left-color: var(--primary-color);
+}
+
+.transaction-list .transaction-item:last-child {
+    border-bottom: none !important;
+}
+
+.transaction-icon .badge {
+    box-shadow: 0 4px 12px rgba(79, 139, 255, 0.2);
+}
+
+/* Wallet List */
+.wallet-list .wallet-item {
+    padding: 0.75rem 0;
+    border-bottom: 1px solid rgba(223, 229, 247, 0.5);
+}
+
+.wallet-list .wallet-item:last-child {
+    border-bottom: none;
+}
+
+.wallet-list .progress {
+    background-color: rgba(223, 229, 247, 0.5);
+}
+
+.wallet-list .progress-bar {
+    background: linear-gradient(90deg, var(--primary-color), var(--secondary-color)) !important;
+}
+
+/* Top Spending List */
+.top-spending-list .spending-item {
+    transition: all 0.3s ease;
+}
+
+.top-spending-list .spending-item:hover {
+    background-color: rgba(255, 107, 107, 0.04);
+}
+
+.top-spending-list .spending-item:last-child {
+    border-bottom: none !important;
+}
+
+/* Footer improvements */
+.footer-minimal {
+    padding: 1rem;
+    font-size: 0.875rem;
+}
+
+/* Min width for responsive */
+.min-width-0 {
+    min-width: 0;
+}
+
+/* Utilities */
+.text-truncate {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }

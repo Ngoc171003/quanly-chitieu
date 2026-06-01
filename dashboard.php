@@ -11,7 +11,7 @@ $year = $_GET['year'] ?? date('Y');
 
 // Get dashboard data
 $dashboard = getDashboardData($user_id, $db, $month, $year);
-$recent_transactions = getRecentTransactions($user_id, $db, 5);
+$recent_transactions_result = getRecentTransactions($user_id, $db, 10);
 $category_stats = getCategoryStats($user_id, $db, 'chi', $month, $year);
 $monthly_summary = getMonthlySummary($user_id, $db, $year);
 $is_budget_exceeded = isBudgetExceeded($user_id, $db, $month, $year);
@@ -19,6 +19,12 @@ $wallets_result = getUserWallets($user_id, $db);
 $wallets = [];
 while ($row = $wallets_result->fetch_assoc()) {
     $wallets[] = $row;
+}
+
+// Store transactions in array for multiple use
+$recent_transactions = [];
+while ($row = $recent_transactions_result->fetch_assoc()) {
+    $recent_transactions[] = $row;
 }
 
 // Compute wallet groups for modal details
@@ -40,6 +46,18 @@ foreach ($wallets as $w) {
 $pie_data = [];
 while ($row = $category_stats->fetch_assoc()) {
     $pie_data[] = ['label' => $row['name'], 'value' => (float)$row['total']];
+}
+
+// Get top spending categories
+$top_spending_data = [];
+$top_spending_result = getCategoryStats($user_id, $db, 'chi', $month, $year);
+if ($top_spending_result) {
+    $spending_count = 0;
+    while ($top = $top_spending_result->fetch_assoc()) {
+        if ($spending_count >= 5) break;
+        $top_spending_data[] = $top;
+        $spending_count++;
+    }
 }
 
 // Get monthly data for bar chart
@@ -65,8 +83,8 @@ $page_title = 'Dashboard - ' . APP_NAME;
             <i class="fas fa-chart-line"></i> Dashboard
         </h1>
     </div>
-    <div class="col-md-4">
-        <div class="input-group">
+    <div class="col-md-4 d-flex dashboard-filters gap-2 align-items-center">
+        <div class="flex-grow-1">
             <select class="form-select" id="monthSelect" onchange="changeMonth()">
                 <?php for ($m = 1; $m <= 12; $m++): ?>
                 <option value="<?php echo $m; ?>" <?php echo $m == $month ? 'selected' : ''; ?>>
@@ -74,6 +92,8 @@ $page_title = 'Dashboard - ' . APP_NAME;
                 </option>
                 <?php endfor; ?>
             </select>
+        </div>
+        <div class="flex-grow-1">
             <select class="form-select" id="yearSelect" onchange="changeMonth()">
                 <?php for ($y = 2024; $y <= 2027; $y++): ?>
                 <option value="<?php echo $y; ?>" <?php echo $y == $year ? 'selected' : ''; ?>>
@@ -82,78 +102,60 @@ $page_title = 'Dashboard - ' . APP_NAME;
                 <?php endfor; ?>
             </select>
         </div>
+        <a href="<?php echo BASE_URL; ?>export.php" class="btn btn-primary export-btn" style="white-space: nowrap;">
+            <i class="fas fa-download"></i> Xuất Excel
+        </a>
     </div>
 </div>
 
-<!-- Key Metrics -->
+<!-- Key Metrics - Visual Hierarchy -->
 <div class="row mb-4">
-    <div class="col-md-3">
-        <div class="card border-0 shadow-sm h-100">
-            <div class="card-body">
-                <div class="d-flex justify-content-between align-items-start">
-                    <div>
-                        <p class="text-muted mb-2"><i class="fas fa-arrow-up text-success"></i> Tổng Thu</p>
-                        <h3 class="text-success"><?php echo formatCurrency($dashboard['income']); ?></h3>
-                    </div>
-                    <span class="badge bg-success rounded-circle p-3">
-                        <i class="fas fa-wallet"></i>
-                    </span>
-                </div>
-            </div>
-        </div>
-    </div>
-    
-    <div class="col-md-3">
-        <div class="card border-0 shadow-sm h-100">
-            <div class="card-body">
-                <div class="d-flex justify-content-between align-items-start">
-                    <div>
-                        <p class="text-muted mb-2"><i class="fas fa-arrow-down text-danger"></i> Tổng Chi</p>
-                        <h3 class="text-danger"><?php echo formatCurrency($dashboard['expenses']); ?></h3>
-                    </div>
-                    <span class="badge bg-danger rounded-circle p-3">
-                        <i class="fas fa-shopping-bag"></i>
-                    </span>
-                </div>
-            </div>
-        </div>
-    </div>
-    
-    <div class="col-md-3">
+    <!-- Primary: Tổng Số Dư Ví - Large Card -->
+    <div class="col-lg-6 col-md-12">
         <a href="#" class="text-decoration-none text-reset" data-bs-toggle="modal" data-bs-target="#walletDetailModal">
-            <div class="card border-0 shadow-sm h-100">
+            <div class="card border-0 shadow-sm h-100 card-primary">
                 <div class="card-body">
                     <div class="d-flex justify-content-between align-items-start">
-                        <div>
-                            <p class="text-muted mb-2"><i class="fas fa-coins text-warning"></i> Tổng Số Dư Ví</p>
-                            <h3 class="text-warning"><?php echo formatCurrency($dashboard['wallet_total']); ?></h3>
+                        <div class="flex-grow-1">
+                            <p class="text-muted mb-2"><i class="fas fa-coins"></i> Tổng Số Dư Ví</p>
+                            <h2 class="text-warning mb-3"><?php echo formatCurrency($dashboard['wallet_total']); ?></h2>
+                            <small class="text-muted">Nhấn để xem chi tiết các ví</small>
                         </div>
-                        <span class="badge bg-warning rounded-circle p-3">
-                            <i class="fas fa-piggy-bank"></i>
+                        <span class="badge bg-warning rounded-circle p-4">
+                            <i class="fas fa-piggy-bank" style="font-size: 1.5rem;"></i>
                         </span>
-                    </div>
-                    <div class="mt-3 text-sm text-muted">
-                        Xem chi tiết số dư ví
                     </div>
                 </div>
             </div>
         </a>
     </div>
     
-    <div class="col-md-3">
+    <!-- Secondary Metrics -->
+    <div class="col-lg-2 col-md-4 col-sm-6">
         <div class="card border-0 shadow-sm h-100">
             <div class="card-body">
-                <div class="d-flex justify-content-between align-items-start">
-                    <div>
-                        <p class="text-muted mb-2"><i class="fas fa-balance-scale text-info"></i> Số Dư Tài Khoản</p>
-                        <h3 class="<?php echo $dashboard['balance'] >= 0 ? 'text-info' : 'text-danger'; ?>">
-                            <?php echo formatCurrency($dashboard['balance']); ?>
-                        </h3>
-                    </div>
-                    <span class="badge bg-info rounded-circle p-3">
-                        <i class="fas fa-calculator"></i>
-                    </span>
-                </div>
+                <p class="text-muted mb-2"><i class="fas fa-arrow-up text-success"></i> Tổng Thu</p>
+                <h4 class="text-success"><?php echo formatCurrency($dashboard['income']); ?></h4>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-lg-2 col-md-4 col-sm-6">
+        <div class="card border-0 shadow-sm h-100">
+            <div class="card-body">
+                <p class="text-muted mb-2"><i class="fas fa-arrow-down text-danger"></i> Tổng Chi</p>
+                <h4 class="text-danger"><?php echo formatCurrency($dashboard['expenses']); ?></h4>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-lg-2 col-md-4 col-sm-6">
+        <div class="card border-0 shadow-sm h-100">
+            <div class="card-body">
+                <p class="text-muted mb-2"><i class="fas fa-exchange-alt text-primary"></i> Chênh Lệch</p>
+                <h4 class="<?php echo $dashboard['income_expense_diff'] >= 0 ? 'text-success' : 'text-danger'; ?>">
+                    <?php echo formatCurrency($dashboard['income_expense_diff']); ?>
+                </h4>
             </div>
         </div>
     </div>
@@ -166,36 +168,54 @@ $page_title = 'Dashboard - ' . APP_NAME;
         <div class="card border-0 shadow-sm">
             <div class="card-body">
                 <div class="row align-items-center">
-                    <div class="col-md-6">
-                        <h6 class="card-title mb-2">Ngân Sách Tháng <?php echo $month; ?>/<?php echo $year; ?></h6>
-                        <div class="progress" style="height: 25px;">
+                    <div class="col-md-8">
+                        <h6 class="card-title mb-3">Ngân Sách Tháng <?php echo $month; ?>/<?php echo $year; ?></h6>
+                        <div class="progress" style="height: 30px;">
                             <?php 
-                            $percentage = min(100, ($dashboard['expenses'] / $dashboard['budget']) * 100);
-                            $progress_class = $percentage > 100 ? 'bg-danger' : ($percentage > 80 ? 'bg-warning' : 'bg-success');
+                            $percentage = ($dashboard['expenses'] / $dashboard['budget']) * 100;
+                            if ($percentage > 100) {
+                                $progress_class = 'bg-danger';
+                            } elseif ($percentage > 90) {
+                                $progress_class = 'bg-warning';
+                            } elseif ($percentage > 70) {
+                                $progress_class = 'bg-warning';
+                            } else {
+                                $progress_class = 'bg-success';
+                            }
+                            $display_percentage = min(100, $percentage);
                             ?>
                             <div class="progress-bar <?php echo $progress_class; ?>" role="progressbar" 
-                                 style="width: <?php echo $percentage; ?>%">
-                                <?php echo round($percentage, 1); ?>%
+                                 style="width: <?php echo $display_percentage; ?>%">
+                                <strong><?php echo round($percentage, 1); ?>%</strong>
                             </div>
                         </div>
                     </div>
-                    <div class="col-md-6 text-end">
-                        <p class="mb-1">
-                            <strong>Giới hạn:</strong> <?php echo formatCurrency($dashboard['budget']); ?>
-                        </p>
-                        <p class="mb-0">
-                            <strong>Còn lại:</strong> 
-                            <span class="<?php echo $dashboard['budget_remaining'] >= 0 ? 'text-success' : 'text-danger'; ?>">
-                                <?php echo formatCurrency($dashboard['budget_remaining']); ?>
-                            </span>
-                        </p>
-                        <?php if ($is_budget_exceeded): ?>
-                        <div class="alert alert-danger mt-2 mb-0 py-1 px-2">
-                            <i class="fas fa-exclamation-triangle"></i> Bạn đã vượt quá ngân sách!
+                    <div class="col-md-4 text-end ps-md-3">
+                        <div class="mb-2">
+                            <small class="text-muted d-block">Giới hạn</small>
+                            <strong><?php echo formatCurrency($dashboard['budget']); ?></strong>
                         </div>
-                        <?php endif; ?>
+                        <div>
+                            <small class="text-muted d-block">Đã tiêu</small>
+                            <strong><?php echo formatCurrency($dashboard['expenses']); ?></strong>
+                        </div>
                     </div>
                 </div>
+                
+                <?php if ($dashboard['budget_exceeded']): ?>
+                    <div class="alert alert-danger mt-3 mb-0 py-2 px-3">
+                        <i class="fas fa-exclamation-circle"></i> <strong>Đã vượt ngân sách <?php echo formatCurrency($dashboard['budget_overflow']); ?></strong>
+                    </div>
+                <?php else: ?>
+                    <div class="row mt-3 small text-center">
+                        <div class="col-6">
+                            <span class="text-muted">Còn lại:</span> <strong class="text-success"><?php echo formatCurrency($dashboard['budget_remaining']); ?></strong>
+                        </div>
+                        <div class="col-6">
+                            <span class="text-muted">Trung bình/ngày:</span> <strong><?php echo formatCurrency($dashboard['budget_remaining'] / (date('t') - date('d') + 1)); ?></strong>
+                        </div>
+                    </div>
+                <?php endif; ?>
             </div>
         </div>
     </div>
@@ -223,122 +243,121 @@ $page_title = 'Dashboard - ' . APP_NAME;
     </div>
 </div>
 
-<!-- Recent Transactions -->
-<div class="row">
-    <div class="col-lg-8">
-        <div class="card border-0 shadow-sm">
+<!-- Recent Transactions & Wallets & Top Spending -->
+<div class="row mb-4">
+    <!-- Giao dịch gần đây -->
+    <div class="col-lg-6">
+        <div class="card border-0 shadow-sm h-100">
             <div class="card-header bg-white border-bottom">
                 <h6 class="mb-0"><i class="fas fa-history"></i> Giao Dịch Gần Đây</h6>
             </div>
             <div class="card-body p-0">
-                <div class="table-responsive">
-                    <table class="table table-hover mb-0">
-                        <thead class="table-light">
-                            <tr>
-                                <th>Ngày</th>
-                                <th>Danh Mục</th>
-                                <th>Ghi Chú</th>
-                                <th class="text-end">Số Tiền</th>
-                                <th class="text-center">Thao Tác</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            <?php while ($trans = $recent_transactions->fetch_assoc()): ?>
-                            <tr>
-                                <td><?php echo formatDate($trans['transaction_date']); ?></td>
-                                <td>
-                                    <span class="badge <?php echo strtolower($trans['category_type']) == 'thu' ? 'bg-success' : 'bg-danger'; ?>">
-                                        <?php echo e($trans['category_name']); ?>
-                                    </span>
-                                </td>
-                                <td><?php echo e(substr($trans['note'] ?? '', 0, 20)); ?></td>
-                                <td class="text-end <?php echo strtolower($trans['category_type']) == 'thu' ? 'text-success' : 'text-danger'; ?>">
-                                    <strong><?php echo (strtolower($trans['category_type']) == 'thu' ? '+' : '-') . formatCurrency($trans['amount']); ?></strong>
-                                </td>
-                                <td class="text-center">
-                                    <a href="<?php echo BASE_URL; ?>edit-transaction.php?id=<?php echo $trans['id']; ?>" 
-                                       class="btn btn-sm btn-outline-primary" title="Sửa">
-                                        <i class="fas fa-edit"></i>
-                                    </a>
-                                </td>
-                            </tr>
-                            <?php endwhile; ?>
-                        </tbody>
-                    </table>
+                <div class="transaction-list">
+                    <?php 
+                    $trans_count = 0;
+                    foreach ($recent_transactions as $trans): 
+                        if ($trans_count >= 6) break;
+                        $is_income = strtolower($trans['category_type']) == 'thu';
+                    ?>
+                    <div class="transaction-item d-flex justify-content-between align-items-center p-3 border-bottom">
+                        <div class="d-flex align-items-center gap-3 flex-grow-1">
+                            <div class="transaction-icon">
+                                <span class="badge rounded-circle p-3 <?php echo $is_income ? 'bg-success' : 'bg-danger'; ?>">
+                                    <i class="fas fa-<?php echo $is_income ? 'arrow-down' : 'arrow-up'; ?>" style="color: white;"></i>
+                                </span>
+                            </div>
+                            <div class="flex-grow-1 min-width-0">
+                                <div class="fw-bold text-truncate"><?php echo e($trans['category_name']); ?></div>
+                                <small class="text-muted"><?php echo formatDate($trans['transaction_date']); ?></small>
+                            </div>
+                        </div>
+                        <div class="text-end">
+                            <div class="fw-bold <?php echo $is_income ? 'text-success' : 'text-danger'; ?>">
+                                <?php echo ($is_income ? '+' : '-') . formatCurrency($trans['amount']); ?>
+                            </div>
+                        </div>
+                    </div>
+                    <?php 
+                        $trans_count++;
+                    endforeach; 
+                    ?>
                 </div>
             </div>
             <div class="card-footer text-center">
-                <a href="<?php echo BASE_URL; ?>transactions.php" class="btn btn-sm btn-primary">
-                    Xem Tất Cả
+                <a href="<?php echo BASE_URL; ?>transactions.php" class="btn btn-sm btn-outline-primary">
+                    Xem Tất Cả <i class="fas fa-arrow-right"></i>
                 </a>
             </div>
         </div>
     </div>
     
-    <!-- Sidebar -->
-    <div class="col-lg-4">
-        <div class="card border-0 shadow-sm mb-3">
-            <div class="card-header bg-white border-bottom">
-                <h6 class="mb-0"><i class="fas fa-list"></i> Danh Mục</h6>
-            </div>
-            <div class="card-body">
-                <?php
-                $cat_query = "SELECT id, name, type FROM categories WHERE user_id = ? ORDER BY type, name";
-                $categories_result = $db->execute($cat_query, [$user_id]);
-                $current_type = null;
-                while ($cat = $categories_result->fetch_assoc()):
-                    if ($current_type !== $cat['type']):
-                        if ($current_type !== null) echo '</ul>';
-                        echo '<h6 class="mt-3 mb-2"><strong>' . (strtolower($cat['type']) == 'thu' ? '📥 Thu' : '📤 Chi') . '</strong></h6>';
-                        echo '<ul class="list-unstyled">';
-                        $current_type = $cat['type'];
-                    endif;
-                ?>
-                    <li class="mb-2">
-                        <a href="<?php echo BASE_URL; ?>transactions.php?category=<?php echo $cat['id']; ?>" class="text-decoration-none">
-                            <i class="fas fa-circle text-muted" style="font-size: 6px;"></i> <?php echo e($cat['name']); ?>
-                        </a>
-                    </li>
-                <?php endwhile; ?>
-                <?php if ($current_type !== null): ?></ul><?php endif; ?>
-            </div>
-        </div>
-        
+    <!-- Ví của tôi & Top Chi Tiêu -->
+    <div class="col-lg-6">
+        <!-- Ví của tôi -->
         <div class="card border-0 shadow-sm mb-3">
             <div class="card-header bg-white border-bottom">
                 <h6 class="mb-0"><i class="fas fa-wallet"></i> Ví của tôi</h6>
             </div>
             <div class="card-body">
-                        <?php if (count($wallets) === 0): ?>
-                    <p class="text-muted">Chưa có ví nào. Hãy tạo ví trong mục Ví.</p>
+                <?php if (count($wallets) === 0): ?>
+                    <p class="text-muted mb-0">Chưa có ví nào. <a href="<?php echo BASE_URL; ?>wallets.php">Tạo ví</a></p>
                 <?php else: ?>
-                    <ul class="list-group list-group-flush">
-                        <?php foreach ($wallets as $wallet): ?>
-                        <li class="list-group-item d-flex justify-content-between align-items-center">
-                            <?php echo e($wallet['name']); ?>
-                            <span><?php echo formatCurrency($wallet['balance']); ?></span>
-                        </li>
+                    <div class="wallet-list">
+                        <?php 
+                        $wallet_total_balance = array_sum(array_column($wallets, 'balance'));
+                        foreach ($wallets as $wallet): 
+                            $wallet_percentage = $wallet_total_balance > 0 ? ($wallet['balance'] / $wallet_total_balance) * 100 : 0;
+                        ?>
+                        <div class="wallet-item mb-3">
+                            <div class="d-flex justify-content-between align-items-center mb-2">
+                                <div class="fw-bold"><?php echo e($wallet['name']); ?></div>
+                                <div class="text-end">
+                                    <div class="fw-bold"><?php echo formatCurrency($wallet['balance']); ?></div>
+                                    <small class="text-muted"><?php echo round($wallet_percentage, 0); ?>%</small>
+                                </div>
+                            </div>
+                            <div class="progress" style="height: 8px;">
+                                <div class="progress-bar bg-primary" role="progressbar" style="width: <?php echo $wallet_percentage; ?>%"></div>
+                            </div>
+                        </div>
                         <?php endforeach; ?>
-                    </ul>
+                    </div>
+                    <a href="<?php echo BASE_URL; ?>wallets.php" class="btn btn-sm btn-outline-primary w-100 mt-3">
+                        Quản lý ví
+                    </a>
                 <?php endif; ?>
-                <a href="<?php echo BASE_URL; ?>wallets.php" class="btn btn-sm btn-outline-primary mt-3 w-100">
-                    Quản lý ví
-                </a>
             </div>
         </div>
         
+        <!-- Top Chi Tiêu Tháng -->
         <div class="card border-0 shadow-sm">
-            <div class="card-body text-center">
-                <h6 class="mb-3">Hành Động Nhanh</h6>
-                <a href="<?php echo BASE_URL; ?>add-transaction.php?type=chi" class="btn btn-danger btn-sm w-100 mb-2">
-                    <i class="fas fa-plus"></i> Thêm Chi
-                </a>
-                <a href="<?php echo BASE_URL; ?>add-transaction.php?type=thu" class="btn btn-success btn-sm w-100 mb-2">
-                    <i class="fas fa-plus"></i> Thêm Thu
-                </a>
-                <a href="<?php echo BASE_URL; ?>export.php" class="btn btn-primary btn-sm w-100">
-                    <i class="fas fa-download"></i> Xuất Excel
-                </a>
+            <div class="card-header bg-white border-bottom">
+                <h6 class="mb-0"><i class="fas fa-fire"></i> Top Chi Tiêu Tháng <?php echo $month; ?></h6>
+            </div>
+            <div class="card-body p-0">
+                <div class="top-spending-list">
+                    <?php 
+                    if (count($top_spending_data) > 0):
+                        foreach ($top_spending_data as $top): 
+                    ?>
+                    <div class="spending-item d-flex justify-content-between align-items-center p-3 border-bottom">
+                        <div class="flex-grow-1">
+                            <div class="fw-bold"><?php echo e($top['name']); ?></div>
+                            <small class="text-muted"><?php echo $top['count']; ?> giao dịch</small>
+                        </div>
+                        <div class="text-end fw-bold text-danger">
+                            <?php echo formatCurrency($top['total']); ?>
+                        </div>
+                    </div>
+                    <?php 
+                        endforeach;
+                    else:
+                    ?>
+                    <div class="p-3 text-center text-muted">
+                        <p class="mb-0">Chưa có dữ liệu chi tiêu</p>
+                    </div>
+                    <?php endif; ?>
+                </div>
             </div>
         </div>
     </div>
@@ -414,14 +433,23 @@ function changeMonth() {
     window.location.href = '?month=' + month + '&year=' + year;
 }
 
-// Pie Chart Data
-const pieData = <?php echo json_encode($pie_data); ?>;
+// Pie Chart Data - Top 5 + Others
+let pieData = <?php echo json_encode($pie_data); ?>;
+const maxCategories = 5;
+
+if (pieData.length > maxCategories) {
+    const topCategories = pieData.slice(0, maxCategories);
+    const otherTotal = pieData.slice(maxCategories).reduce((sum, cat) => sum + cat.value, 0);
+    topCategories.push({ label: 'Khác', value: otherTotal });
+    pieData = topCategories;
+}
+
 const pieLabels = pieData.map(d => d.label);
 const pieValues = pieData.map(d => d.value);
 
 const colors = [
-    '#FF6384', '#36A2EB', '#FFCE56', '#4BC0C0', '#9966FF',
-    '#FF9F40', '#FF6384', '#C9CBCF'
+    '#4f8bff', '#6db3ff', '#7dc7ff', '#ff759c', '#ffb26b',
+    '#45c49f', '#9966FF', '#FF6384', '#36A2EB', '#FFCE56'
 ];
 
 const pieCtx = document.getElementById('pieChart').getContext('2d');
@@ -461,13 +489,13 @@ new Chart(barCtx, {
             {
                 label: 'Thu',
                 data: incomeData,
-                backgroundColor: '#28a745',
+                backgroundColor: '#45c49f',
                 borderRadius: 4
             },
             {
                 label: 'Chi',
                 data: expenseData,
-                backgroundColor: '#dc3545',
+                backgroundColor: '#ff6b6b',
                 borderRadius: 4
             }
         ]

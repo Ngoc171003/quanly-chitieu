@@ -94,21 +94,30 @@ function getDashboardData($user_id, $db, $month = null, $year = null) {
     $budget_result = $db->execute($budget_query, [$user_id, $month, $year]);
     $budget = $budget_result && $budget_result->num_rows > 0 ? $budget_result->fetch_assoc()['limit_amount'] : 0;
     
+    // Get total wallet balance
     $wallet_query = "SELECT COALESCE(SUM(balance), 0) as wallet_total FROM wallets WHERE user_id = ?";
     $wallet_result = $db->execute($wallet_query, [$user_id]);
     $wallet_total = $wallet_result && $wallet_result->num_rows > 0 ? $wallet_result->fetch_assoc()['wallet_total'] : 0;
     
-    $balance = $income - $expenses;
-    $budget_remaining = max(0, $budget - $expenses);
+    // Calculate income - expenses difference (Chênh lệch Thu Chi)
+    $income_expense_diff = $income - $expenses;
+    
+    // Calculate budget remaining and overflow
+    $budget_remaining = $budget - $expenses;
+    $budget_exceeded = $expenses > $budget ? true : false;
+    $budget_overflow = max(0, $expenses - $budget); // Amount exceeded by
     
     return [
         'income' => floatval($income),
         'expenses' => floatval($expenses),
-        'balance' => floatval($balance),
+        'balance' => floatval($income - $expenses),
+        'income_expense_diff' => floatval($income_expense_diff),
+        'wallet_total' => floatval($wallet_total),
         'budget' => floatval($budget),
         'budget_remaining' => floatval($budget_remaining),
+        'budget_exceeded' => $budget_exceeded,
+        'budget_overflow' => floatval($budget_overflow),
         'budget_percentage' => $budget > 0 ? min(100, ($expenses / $budget) * 100) : 0,
-        'wallet_total' => floatval($wallet_total),
         'month' => $month,
         'year' => $year
     ];
