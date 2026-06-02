@@ -27,25 +27,11 @@ CREATE TABLE categories (
     INDEX idx_user_type (user_id, type)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
--- Wallets Table
-CREATE TABLE wallets (
-    id INT PRIMARY KEY AUTO_INCREMENT,
-    user_id INT NOT NULL,
-    name VARCHAR(100) NOT NULL,
-    type ENUM('Tiền mặt', 'Tài khoản ngân hàng', 'Tiết kiệm') NOT NULL DEFAULT 'Tiền mặt',
-    balance DECIMAL(15, 2) NOT NULL DEFAULT 0,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    CONSTRAINT fk_wallet_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
-    INDEX idx_wallet_user (user_id)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
-
 -- Transactions Table
 CREATE TABLE transactions (
     id INT PRIMARY KEY AUTO_INCREMENT,
     user_id INT NOT NULL,
     category_id INT NOT NULL,
-    wallet_id INT NOT NULL,
     amount DECIMAL(15, 2) NOT NULL,
     transaction_date DATE NOT NULL,
     note TEXT,
@@ -53,10 +39,8 @@ CREATE TABLE transactions (
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     CONSTRAINT fk_transaction_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
     CONSTRAINT fk_transaction_category FOREIGN KEY (category_id) REFERENCES categories(id) ON DELETE CASCADE,
-    CONSTRAINT fk_transaction_wallet FOREIGN KEY (wallet_id) REFERENCES wallets(id) ON DELETE RESTRICT,
     INDEX idx_user_date (user_id, transaction_date),
     INDEX idx_user_category (user_id, category_id),
-    INDEX idx_user_wallet (user_id, wallet_id),
     INDEX idx_transaction_date (transaction_date)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 

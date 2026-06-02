@@ -5,6 +5,9 @@ require_once 'app/functions.php';
 
 requireAuth($db);
 
+header('Location: ' . BASE_URL . 'dashboard.php');
+exit;
+
 $user_id = $_SESSION['user_id'];
 $error = '';
 $success = '';

@@ -44,11 +44,6 @@
                         </a>
                     </li>
                     <li class="nav-item">
-                        <a class="nav-link" href="<?php echo BASE_URL; ?>wallets.php">
-                            <i class="fas fa-wallet"></i> Ví
-                        </a>
-                    </li>
-                    <li class="nav-item">
                         <a class="nav-link" href="<?php echo BASE_URL; ?>categories.php">
                             <i class="fas fa-list"></i> Danh mục
                         </a>

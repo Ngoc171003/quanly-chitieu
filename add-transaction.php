@@ -12,7 +12,7 @@ $trans_id = isset($_GET['id']) ? intval($_GET['id']) : 0;
 
 $transaction = null;
 if ($trans_id) {
-    $check = "SELECT id, category_id, wallet_id, amount, transaction_date, note FROM transactions WHERE id = ? AND user_id = ?";
+    $check = "SELECT id, category_id, amount, transaction_date, note FROM transactions WHERE id = ? AND user_id = ?";
     $result = $db->execute($check, [$trans_id, $user_id]);
     if ($result && $result->num_rows > 0) {
         $transaction = $result->fetch_assoc();
@@ -20,23 +20,19 @@ if ($trans_id) {
 }
 
 $selected_type = strtolower($_GET['type'] ?? '');
-$wallets = getUserWallets($user_id, $db);
 
 if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     if (!isset($_POST['csrf_token']) || !verifyCsrfToken($_POST['csrf_token'])) {
         $error = 'Yêu cầu không hợp lệ (CSRF Token invalid)!';
     } else {
         $category_id = intval($_POST['category_id'] ?? 0);
-        $wallet_id = intval($_POST['wallet_id'] ?? 0);
-    $amount = floatval($_POST['amount'] ?? 0);
-    $transaction_date = trim($_POST['transaction_date'] ?? '');
-    $note = trim($_POST['note'] ?? '');
+        $amount = floatval($_POST['amount'] ?? 0);
+        $transaction_date = trim($_POST['transaction_date'] ?? '');
+        $note = trim($_POST['note'] ?? '');
     
     // Validate inputs
     if ($category_id <= 0) {
         $error = 'Vui lòng chọn danh mục!';
-    } elseif ($wallet_id <= 0) {
-        $error = 'Vui lòng chọn ví!';
     } elseif (!isValidAmount($amount)) {
         $error = 'Số tiền phải lớn hơn 0!';
     } elseif (empty($transaction_date)) {
@@ -46,21 +42,14 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
         $cat_query = "SELECT id, type FROM categories WHERE id = ? AND user_id = ?";
         $cat_result = $db->execute($cat_query, [$category_id, $user_id]);
         
-        // Check wallet exists and belongs to user
-        $wallet_query = "SELECT id FROM wallets WHERE id = ? AND user_id = ?";
-        $wallet_result = $db->execute($wallet_query, [$wallet_id, $user_id]);
-        
         if (!$cat_result || $cat_result->num_rows == 0) {
             $error = 'Danh mục không hợp lệ!';
-        } elseif (!$wallet_result || $wallet_result->num_rows == 0) {
-            $error = 'Ví không hợp lệ!';
         } else {
             $category = $cat_result->fetch_assoc();
             $category_type = strtolower($category['type']);
-            $wallet_effect = $category_type === 'thu' ? $amount : -$amount;
             
             if ($trans_id && $transaction) {
-                $old_query = "SELECT t.amount, t.wallet_id, c.type FROM transactions t
+                $old_query = "SELECT t.amount, c.type FROM transactions t
                               JOIN categories c ON t.category_id = c.id
                               WHERE t.id = ? AND t.user_id = ?";
                 $old_result = $db->execute($old_query, [$trans_id, $user_id]);
@@ -69,22 +58,9 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                 if (!$old_data) {
                     $error = 'Giao dịch không tồn tại!';
                 } else {
-                    $old_amount = floatval($old_data['amount']);
-                    $old_wallet_id = intval($old_data['wallet_id']);
-                    $old_type = strtolower($old_data['type']);
-                    $old_effect = $old_type === 'thu' ? -$old_amount : $old_amount;
-                    
-                    if ($old_wallet_id === $wallet_id) {
-                        $balance_delta = $old_effect + $wallet_effect;
-                        $db->execute("UPDATE wallets SET balance = balance + ? WHERE id = ? AND user_id = ?", [$balance_delta, $wallet_id, $user_id]);
-                    } else {
-                        $db->execute("UPDATE wallets SET balance = balance + ? WHERE id = ? AND user_id = ?", [$old_effect, $old_wallet_id, $user_id]);
-                        $db->execute("UPDATE wallets SET balance = balance + ? WHERE id = ? AND user_id = ?", [$wallet_effect, $wallet_id, $user_id]);
-                    }
-                    
-                    $update = "UPDATE transactions SET category_id = ?, wallet_id = ?, amount = ?, note = ?, transaction_date = ?
+                    $update = "UPDATE transactions SET category_id = ?, amount = ?, note = ?, transaction_date = ?
                               WHERE id = ? AND user_id = ?";
-                    $update_result = $db->execute($update, [$category_id, $wallet_id, $amount, $note, $transaction_date, $trans_id, $user_id]);
+                    $update_result = $db->execute($update, [$category_id, $amount, $note, $transaction_date, $trans_id, $user_id]);
                     
                     if ($update_result !== false) {
                         $success = 'Giao dịch đã được cập nhật!';
@@ -94,12 +70,11 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                     }
                 }
             } else {
-                $insert = "INSERT INTO transactions (user_id, category_id, wallet_id, amount, transaction_date, note)
-                          VALUES (?, ?, ?, ?, ?, ?)";
-                $insert_result = $db->execute($insert, [$user_id, $category_id, $wallet_id, $amount, $transaction_date, $note]);
+                $insert = "INSERT INTO transactions (user_id, category_id, amount, transaction_date, note)
+                          VALUES (?, ?, ?, ?, ?)";
+                $insert_result = $db->execute($insert, [$user_id, $category_id, $amount, $transaction_date, $note]);
                 
                 if ($insert_result !== false) {
-                    $db->execute("UPDATE wallets SET balance = balance + ? WHERE id = ? AND user_id = ?", [$wallet_effect, $wallet_id, $user_id]);
                     $success = 'Giao dịch đã được thêm!';
                     header('Refresh: 1; URL=' . BASE_URL . 'transactions.php');
                 } else {
@@ -156,26 +131,6 @@ $page_title = ($trans_id ? 'Sửa' : 'Thêm') . ' Giao Dịch - ' . APP_NAME;
                             </option>
                             <?php endwhile; ?>
                         </select>
-                    </div>
-
-                    <div class="mb-3">
-                        <label class="form-label">Ví <span class="text-danger">*</span></label>
-                        <select name="wallet_id" class="form-select" required>
-                            <option value="">Chọn ví</option>
-                            <?php if ($wallets->num_rows == 0): ?>
-                                <option value="">(Chưa có ví) - Vui lòng tạo ví trước</option>
-                            <?php else: ?>
-                                <?php while ($wallet = $wallets->fetch_assoc()): ?>
-                                <option value="<?php echo $wallet['id']; ?>" 
-                                        <?php echo ($transaction && $transaction['wallet_id'] == $wallet['id']) ? 'selected' : ''; ?> >
-                                    <?php echo e($wallet['name']); ?> (<?php echo formatCurrency($wallet['balance']); ?>)
-                                </option>
-                                <?php endwhile; ?>
-                            <?php endif; ?>
-                        </select>
-                        <?php if ($wallets->num_rows == 0): ?>
-                        <div class="form-text text-danger">Bạn cần tạo ít nhất một ví trước khi thêm giao dịch.</div>
-                        <?php endif; ?>
                     </div>
 
                     <div class="mb-3">

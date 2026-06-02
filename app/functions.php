@@ -94,11 +94,6 @@ function getDashboardData($user_id, $db, $month = null, $year = null) {
     $budget_result = $db->execute($budget_query, [$user_id, $month, $year]);
     $budget = $budget_result && $budget_result->num_rows > 0 ? $budget_result->fetch_assoc()['limit_amount'] : 0;
     
-    // Get total wallet balance
-    $wallet_query = "SELECT COALESCE(SUM(balance), 0) as wallet_total FROM wallets WHERE user_id = ?";
-    $wallet_result = $db->execute($wallet_query, [$user_id]);
-    $wallet_total = $wallet_result && $wallet_result->num_rows > 0 ? $wallet_result->fetch_assoc()['wallet_total'] : 0;
-    
     // Calculate income - expenses difference (Chênh lệch Thu Chi)
     $income_expense_diff = $income - $expenses;
     
@@ -112,7 +107,6 @@ function getDashboardData($user_id, $db, $month = null, $year = null) {
         'expenses' => floatval($expenses),
         'balance' => floatval($income - $expenses),
         'income_expense_diff' => floatval($income_expense_diff),
-        'wallet_total' => floatval($wallet_total),
         'budget' => floatval($budget),
         'budget_remaining' => floatval($budget_remaining),
         'budget_exceeded' => $budget_exceeded,
@@ -120,6 +114,108 @@ function getDashboardData($user_id, $db, $month = null, $year = null) {
         'budget_percentage' => $budget > 0 ? min(100, ($expenses / $budget) * 100) : 0,
         'month' => $month,
         'year' => $year
+    ];
+}
+
+/**
+ * Get default wallet for a user, create one if none exists
+ */
+
+/**
+ * Get expense comparison between current month and previous month
+ */
+function getMonthlyExpenseComparison($user_id, $db, $month = null, $year = null) {
+    if (!$month) $month = date('m');
+    if (!$year) $year = date('Y');
+    $month = intval($month);
+    $year = intval($year);
+
+    try {
+        $current = new DateTimeImmutable(sprintf('%04d-%02d-01', $year, $month));
+    } catch (Exception $e) {
+        $current = new DateTimeImmutable('first day of this month');
+    }
+
+    $current_start = $current->format('Y-m-01');
+    $current_end = $current->format('Y-m-t');
+    $previous = $current->modify('-1 month');
+    $previous_start = $previous->format('Y-m-01');
+    $previous_end = $previous->format('Y-m-t');
+
+    $query = "SELECT COALESCE(SUM(t.amount), 0) as total
+              FROM transactions t
+              JOIN categories c ON t.category_id = c.id
+              WHERE t.user_id = ?
+              AND LOWER(c.type) = 'chi'
+              AND t.transaction_date BETWEEN ? AND ?";
+
+    $current_result = $db->execute($query, [$user_id, $current_start, $current_end]);
+    $previous_result = $db->execute($query, [$user_id, $previous_start, $previous_end]);
+
+    $current_total = floatval($current_result->fetch_assoc()['total'] ?? 0);
+    $previous_total = floatval($previous_result->fetch_assoc()['total'] ?? 0);
+    $diff = $current_total - $previous_total;
+    $percent = 0;
+    if ($previous_total != 0) {
+        $percent = round(($diff / $previous_total) * 100, 1);
+    } elseif ($current_total > 0) {
+        $percent = 100.0;
+    }
+
+    return [
+        'current_total' => $current_total,
+        'previous_total' => $previous_total,
+        'diff' => $diff,
+        'percent' => $percent,
+        'current_month_label' => $current->format('m/Y'),
+        'previous_month_label' => $previous->format('m/Y')
+    ];
+}
+
+/**
+ * Get recent expense summary for the last N months
+ */
+function getRecentExpenseSummary($user_id, $db, $months = 6) {
+    $months = max(1, intval($months));
+    $end = new DateTimeImmutable('last day of this month');
+    if ($months === 1) {
+        $start = new DateTimeImmutable('first day of this month');
+    } else {
+        $start = $end->modify(sprintf('first day of -%d month', $months - 1));
+    }
+
+    $start_date = $start->format('Y-m-01');
+    $end_date = $end->format('Y-m-t');
+
+    $query = "SELECT DATE_FORMAT(t.transaction_date, '%Y-%m') as period,
+                     SUM(t.amount) as total
+              FROM transactions t
+              JOIN categories c ON t.category_id = c.id
+              WHERE t.user_id = ?
+              AND LOWER(c.type) = 'chi'
+              AND t.transaction_date BETWEEN ? AND ?
+              GROUP BY period
+              ORDER BY period ASC";
+
+    $result = $db->execute($query, [$user_id, $start_date, $end_date]);
+    $values = [];
+    while ($row = $result->fetch_assoc()) {
+        $values[$row['period']] = floatval($row['total']);
+    }
+
+    $labels = [];
+    $totals = [];
+    $current = $start;
+    for ($i = 0; $i < $months; $i++) {
+        $period = $current->format('Y-m');
+        $labels[] = 'Tháng ' . intval($current->format('m')) . '/' . $current->format('y');
+        $totals[] = $values[$period] ?? 0;
+        $current = $current->modify('+1 month');
+    }
+
+    return [
+        'labels' => $labels,
+        'totals' => $totals,
     ];
 }
 
@@ -184,11 +280,9 @@ function isBudgetExceeded($user_id, $db, $month = null, $year = null) {
 function getRecentTransactions($user_id, $db, $limit = 10) {
     $limit = intval($limit);
     
-    $query = "SELECT t.id, t.amount, t.transaction_date, t.note, c.id as category_id, c.name as category_name, c.type as category_type,
-                     w.id as wallet_id, w.name as wallet_name
+    $query = "SELECT t.id, t.amount, t.transaction_date, t.note, c.id as category_id, c.name as category_name, c.type as category_type
               FROM transactions t
               JOIN categories c ON t.category_id = c.id
-              JOIN wallets w ON t.wallet_id = w.id
               WHERE t.user_id = ?
               ORDER BY t.transaction_date DESC, t.created_at DESC
               LIMIT ?";
@@ -201,11 +295,9 @@ function getRecentTransactions($user_id, $db, $limit = 10) {
  */
 function getTransactions($user_id, $db, $filters = []) {
     $query = "SELECT t.id, t.amount, t.transaction_date, t.note, t.updated_at, 
-                     c.id as category_id, c.name as category_name, c.type as category_type,
-                     w.id as wallet_id, w.name as wallet_name
+                     c.id as category_id, c.name as category_name, c.type as category_type
               FROM transactions t
               JOIN categories c ON t.category_id = c.id
-              JOIN wallets w ON t.wallet_id = w.id
               WHERE t.user_id = ?";
     
     $params = [$user_id];
@@ -222,13 +314,6 @@ function getTransactions($user_id, $db, $filters = []) {
     if (!empty($filters['category_id'])) {
         $query .= " AND t.category_id = ?";
         $params[] = intval($filters['category_id']);
-        $types .= 'i';
-    }
-    
-    // Wallet filter
-    if (!empty($filters['wallet_id'])) {
-        $query .= " AND t.wallet_id = ?";
-        $params[] = intval($filters['wallet_id']);
         $types .= 'i';
     }
 
@@ -275,23 +360,6 @@ function getUserCategories($user_id, $db, $type = null) {
         $query = "SELECT id, name, type FROM categories WHERE user_id = ? ORDER BY type, name";
         return $db->execute($query, [$user_id]);
     }
-}
-
-/**
- * Get user wallets
- */
-function getUserWallets($user_id, $db) {
-    $query = "SELECT id, name, type, balance FROM wallets WHERE user_id = ? ORDER BY name";
-    return $db->execute($query, [$user_id]);
-}
-
-/**
- * Get wallet by id
- */
-function getWalletById($wallet_id, $user_id, $db) {
-    $query = "SELECT id, name, type, balance FROM wallets WHERE id = ? AND user_id = ? LIMIT 1";
-    $result = $db->execute($query, [$wallet_id, $user_id]);
-    return $result && $result->num_rows > 0 ? $result->fetch_assoc() : null;
 }
 
 /**

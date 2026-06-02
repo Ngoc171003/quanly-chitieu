@@ -6,8 +6,15 @@ require_once 'app/functions.php';
 requireAuth();
 
 $user_id = $_SESSION['user_id'];
-$month = date('m');
-$year = date('Y');
+$month = isset($_GET['month']) ? intval($_GET['month']) : date('m');
+$year = isset($_GET['year']) ? intval($_GET['year']) : date('Y');
+
+if ($month < 1 || $month > 12) {
+    $month = date('m');
+}
+if ($year < 2024 || $year > 2027) {
+    $year = date('Y');
+}
 
 $page_title = 'Xuất Dữ Liệu - ' . APP_NAME;
 ?>

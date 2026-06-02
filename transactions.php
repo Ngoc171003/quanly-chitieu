@@ -8,7 +8,6 @@ requireAuth($db);
 $user_id = $_SESSION['user_id'];
 $filter_type = $_GET['type'] ?? '';
 $filter_category = $_GET['category'] ?? '';
-$filter_wallet = $_GET['wallet'] ?? '';
 $filter_date_from = $_GET['date_from'] ?? '';
 $filter_date_to = $_GET['date_to'] ?? '';
 
@@ -19,14 +18,12 @@ if (isset($_GET['action']) && $_GET['action'] == 'delete' && isset($_GET['id']))
         exit;
     } else {
         $trans_id = intval($_GET['id']);
-        $check = "SELECT t.id, t.amount, t.wallet_id, c.type FROM transactions t
+        $check = "SELECT t.id, t.amount, c.type FROM transactions t
                   JOIN categories c ON t.category_id = c.id
                   WHERE t.id = ? AND t.user_id = ?";
         $check_result = $db->execute($check, [$trans_id, $user_id]);
         if ($check_result && $check_result->num_rows > 0) {
             $data = $check_result->fetch_assoc();
-            $wallet_effect = strtolower($data['type']) === 'thu' ? -floatval($data['amount']) : floatval($data['amount']);
-            $db->execute("UPDATE wallets SET balance = balance + ? WHERE id = ? AND user_id = ?", [$wallet_effect, $data['wallet_id'], $user_id]);
             $delete_query = "DELETE FROM transactions WHERE id = ? AND user_id = ?";
             $db->execute($delete_query, [$trans_id, $user_id]);
             header('Location: ' . BASE_URL . 'transactions.php?deleted=1');
@@ -39,7 +36,6 @@ if (isset($_GET['action']) && $_GET['action'] == 'delete' && isset($_GET['id']))
 $filters = [
     'type' => !empty($filter_type) ? strtolower($filter_type) : '',
     'category_id' => !empty($filter_category) ? intval($filter_category) : '',
-    'wallet_id' => !empty($filter_wallet) ? intval($filter_wallet) : '',
     'date_from' => !empty($filter_date_from) ? $filter_date_from : '',
     'date_to' => !empty($filter_date_to) ? $filter_date_to : ''
 ];
@@ -47,9 +43,8 @@ $filters = [
 // Get transactions using parameterized query function
 $transactions = getTransactions($user_id, $db, $filters);
 
-// Get categories and wallets for filter dropdowns
+// Get categories for filter dropdown
 $categories = getUserCategories($user_id, $db);
-$wallets = getUserWallets($user_id, $db);
 
 $page_title = 'Giao Dịch - ' . APP_NAME;
 ?>
@@ -79,17 +74,6 @@ $page_title = 'Giao Dịch - ' . APP_NAME;
                     <?php while ($cat = $categories->fetch_assoc()): ?>
                     <option value="<?php echo $cat['id']; ?>" <?php echo $filter_category == $cat['id'] ? 'selected' : ''; ?>>
                         <?php echo e($cat['name']); ?> (<?php echo strtolower($cat['type']) == 'thu' ? 'Thu' : 'Chi'; ?>)
-                    </option>
-                    <?php endwhile; ?>
-                </select>
-            </div>
-            <div class="col-md-2">
-                <label class="form-label">Ví</label>
-                <select name="wallet" class="form-select">
-                    <option value="">Tất Cả</option>
-                    <?php while ($wallet = $wallets->fetch_assoc()): ?>
-                    <option value="<?php echo $wallet['id']; ?>" <?php echo $filter_wallet == $wallet['id'] ? 'selected' : ''; ?>>
-                        <?php echo e($wallet['name']); ?>
                     </option>
                     <?php endwhile; ?>
                 </select>
@@ -144,7 +128,6 @@ $page_title = 'Giao Dịch - ' . APP_NAME;
                     <tr>
                         <th>Ngày</th>
                         <th>Danh Mục</th>
-                        <th>Ví</th>
                         <th>Ghi Chú</th>
                         <th class="text-end">Số Tiền</th>
                         <th class="text-center" style="width: 120px">Thao Tác</th>
@@ -153,7 +136,7 @@ $page_title = 'Giao Dịch - ' . APP_NAME;
                 <tbody>
                     <?php if ($transactions->num_rows == 0): ?>
                     <tr>
-                        <td colspan="6" class="text-center py-4 text-muted">
+                        <td colspan="5" class="text-center py-4 text-muted">
                             <i class="fas fa-inbox" style="font-size: 2rem;"></i>
                             <p class="mt-2">Không có giao dịch nào</p>
                         </td>
@@ -166,9 +149,6 @@ $page_title = 'Giao Dịch - ' . APP_NAME;
                                 <span class="badge <?php echo strtolower($trans['category_type']) == 'thu' ? 'bg-success' : 'bg-danger'; ?>">
                                     <?php echo e($trans['category_name']); ?>
                                 </span>
-                            </td>
-                            <td>
-                                <span class="badge bg-secondary text-white"><?php echo e($trans['wallet_name']); ?></span>
                             </td>
                             <td><?php echo e($trans['note'] ?? '—'); ?></td>
                             <td class="text-end">

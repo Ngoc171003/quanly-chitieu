@@ -12,14 +12,10 @@ $year = $_GET['year'] ?? date('Y');
 // Get dashboard data
 $dashboard = getDashboardData($user_id, $db, $month, $year);
 $recent_transactions_result = getRecentTransactions($user_id, $db, 10);
-$category_stats = getCategoryStats($user_id, $db, 'chi', $month, $year);
-$monthly_summary = getMonthlySummary($user_id, $db, $year);
+$category_stats_result = getCategoryStats($user_id, $db, 'chi', $month, $year);
+$expense_comparison = getMonthlyExpenseComparison($user_id, $db, $month, $year);
+$expense_trend = getRecentExpenseSummary($user_id, $db, 6);
 $is_budget_exceeded = isBudgetExceeded($user_id, $db, $month, $year);
-$wallets_result = getUserWallets($user_id, $db);
-$wallets = [];
-while ($row = $wallets_result->fetch_assoc()) {
-    $wallets[] = $row;
-}
 
 // Store transactions in array for multiple use
 $recent_transactions = [];
@@ -27,50 +23,24 @@ while ($row = $recent_transactions_result->fetch_assoc()) {
     $recent_transactions[] = $row;
 }
 
-// Compute wallet groups for modal details
-$wallet_cash_total = 0;
-$wallet_account_total = 0;
-$wallet_savings_total = 0;
-foreach ($wallets as $w) {
-    $wallet_type = $w['type'] ?? 'Tiền mặt';
-    if ($wallet_type === 'Tiền mặt') {
-        $wallet_cash_total += floatval($w['balance']);
-    } elseif ($wallet_type === 'Tiết kiệm') {
-        $wallet_savings_total += floatval($w['balance']);
-    } else {
-        $wallet_account_total += floatval($w['balance']);
-    }
+// Process category stats for charts and tables
+$category_stats = [];
+$total_category_spending = 0;
+while ($row = $category_stats_result->fetch_assoc()) {
+    $row['total'] = (float) $row['total'];
+    $category_stats[] = $row;
+    $total_category_spending += $row['total'];
 }
 
-// Get categories for pie chart
 $pie_data = [];
-while ($row = $category_stats->fetch_assoc()) {
-    $pie_data[] = ['label' => $row['name'], 'value' => (float)$row['total']];
+foreach ($category_stats as $row) {
+    $pie_data[] = ['label' => $row['name'], 'value' => $row['total']];
 }
 
-// Get top spending categories
-$top_spending_data = [];
-$top_spending_result = getCategoryStats($user_id, $db, 'chi', $month, $year);
-if ($top_spending_result) {
-    $spending_count = 0;
-    while ($top = $top_spending_result->fetch_assoc()) {
-        if ($spending_count >= 5) break;
-        $top_spending_data[] = $top;
-        $spending_count++;
-    }
-}
+$top_spending_data = array_slice($category_stats, 0, 5);
 
-// Get monthly data for bar chart
-$monthly_income = [];
-$monthly_expense = [];
-$months_labels = [];
-
-while ($row = $monthly_summary->fetch_assoc()) {
-    $month_num = intval($row['month']);
-    $months_labels[] = 'Tháng ' . $month_num;
-    $monthly_income[] = floatval($row['income'] ?? 0);
-    $monthly_expense[] = floatval($row['expenses'] ?? 0);
-}
+$months_labels = $expense_trend['labels'];
+$monthly_expense = $expense_trend['totals'];
 
 $page_title = 'Dashboard - ' . APP_NAME;
 ?>
@@ -102,36 +72,16 @@ $page_title = 'Dashboard - ' . APP_NAME;
                 <?php endfor; ?>
             </select>
         </div>
-        <a href="<?php echo BASE_URL; ?>export.php" class="btn btn-primary export-btn" style="white-space: nowrap;">
-            <i class="fas fa-download"></i> Xuất Excel
+        <a href="<?php echo BASE_URL; ?>export.php?month=<?php echo $month; ?>&year=<?php echo $year; ?>" class="btn btn-primary export-btn" style="white-space: nowrap;">
+            <i class="fas fa-download"></i> Xuất CSV
         </a>
     </div>
 </div>
 
 <!-- Key Metrics - Visual Hierarchy -->
-<div class="row mb-4">
-    <!-- Primary: Tổng Số Dư Ví - Large Card -->
-    <div class="col-lg-6 col-md-12">
-        <a href="#" class="text-decoration-none text-reset" data-bs-toggle="modal" data-bs-target="#walletDetailModal">
-            <div class="card border-0 shadow-sm h-100 card-primary">
-                <div class="card-body">
-                    <div class="d-flex justify-content-between align-items-start">
-                        <div class="flex-grow-1">
-                            <p class="text-muted mb-2"><i class="fas fa-coins"></i> Tổng Số Dư Ví</p>
-                            <h2 class="text-warning mb-3"><?php echo formatCurrency($dashboard['wallet_total']); ?></h2>
-                            <small class="text-muted">Nhấn để xem chi tiết các ví</small>
-                        </div>
-                        <span class="badge bg-warning rounded-circle p-4">
-                            <i class="fas fa-piggy-bank" style="font-size: 1.5rem;"></i>
-                        </span>
-                    </div>
-                </div>
-            </div>
-        </a>
-    </div>
-    
+<div class="row mb-4 justify-content-center">
     <!-- Secondary Metrics -->
-    <div class="col-lg-2 col-md-4 col-sm-6">
+    <div class="col-lg-4 col-md-6 col-sm-6 mb-3">
         <div class="card border-0 shadow-sm h-100">
             <div class="card-body">
                 <p class="text-muted mb-2"><i class="fas fa-arrow-up text-success"></i> Tổng Thu</p>
@@ -140,7 +90,7 @@ $page_title = 'Dashboard - ' . APP_NAME;
         </div>
     </div>
     
-    <div class="col-lg-2 col-md-4 col-sm-6">
+    <div class="col-lg-4 col-md-6 col-sm-6 mb-3">
         <div class="card border-0 shadow-sm h-100">
             <div class="card-body">
                 <p class="text-muted mb-2"><i class="fas fa-arrow-down text-danger"></i> Tổng Chi</p>
@@ -149,13 +99,56 @@ $page_title = 'Dashboard - ' . APP_NAME;
         </div>
     </div>
     
-    <div class="col-lg-2 col-md-4 col-sm-6">
+    <div class="col-lg-4 col-md-6 col-sm-6 mb-3">
         <div class="card border-0 shadow-sm h-100">
             <div class="card-body">
                 <p class="text-muted mb-2"><i class="fas fa-exchange-alt text-primary"></i> Chênh Lệch</p>
                 <h4 class="<?php echo $dashboard['income_expense_diff'] >= 0 ? 'text-success' : 'text-danger'; ?>">
                     <?php echo formatCurrency($dashboard['income_expense_diff']); ?>
                 </h4>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row mb-4">
+    <div class="col-lg-3 col-md-6 mb-3">
+        <div class="card border-0 shadow-sm h-100">
+            <div class="card-body">
+                <p class="text-muted mb-2"><i class="fas fa-calendar-alt"></i> Tổng Chi Tháng Trước</p>
+                <h4 class="text-danger mb-0"><?php echo formatCurrency($expense_comparison['previous_total']); ?></h4>
+                <small class="text-muted">Tháng <?php echo $expense_comparison['previous_month_label']; ?></small>
+            </div>
+        </div>
+    </div>
+    <div class="col-lg-3 col-md-6 mb-3">
+        <div class="card border-0 shadow-sm h-100">
+            <div class="card-body">
+                <p class="text-muted mb-2"><i class="fas fa-calendar-check"></i> Tổng Chi Tháng Hiện Tại</p>
+                <h4 class="text-danger mb-0"><?php echo formatCurrency($expense_comparison['current_total']); ?></h4>
+                <small class="text-muted">Tháng <?php echo $expense_comparison['current_month_label']; ?></small>
+            </div>
+        </div>
+    </div>
+    <div class="col-lg-3 col-md-6 mb-3">
+        <div class="card border-0 shadow-sm h-100">
+            <div class="card-body">
+                <p class="text-muted mb-2"><i class="fas fa-arrow-right"></i> Chênh Lệch</p>
+                <h4 class="<?php echo $expense_comparison['diff'] >= 0 ? 'text-success' : 'text-danger'; ?> mb-0">
+                    <?php echo formatCurrency($expense_comparison['diff']); ?>
+                </h4>
+                <small class="text-muted">So với tháng trước</small>
+            </div>
+        </div>
+    </div>
+    <div class="col-lg-3 col-md-6 mb-3">
+        <div class="card border-0 shadow-sm h-100">
+            <div class="card-body">
+                <p class="text-muted mb-2"><i class="fas fa-percentage"></i> Tỷ lệ tăng/giảm</p>
+                <h4 class="mb-0 <?php echo $expense_comparison['percent'] >= 0 ? 'text-success' : 'text-danger'; ?>">
+                    <?php echo ($expense_comparison['percent'] >= 0 ? '+' : '') . $expense_comparison['percent']; ?>%
+                </h4>
+                <small class="text-muted">So với tháng trước</small>
             </div>
         </div>
     </div>
@@ -236,14 +229,14 @@ $page_title = 'Dashboard - ' . APP_NAME;
     <div class="col-lg-6">
         <div class="card border-0 shadow-sm">
             <div class="card-body">
-                <h6 class="card-title mb-4">Thu Chi Theo Tháng</h6>
+                <h6 class="card-title mb-4">Chi tiêu 6 tháng gần nhất</h6>
                 <canvas id="barChart" height="300"></canvas>
             </div>
         </div>
     </div>
 </div>
 
-<!-- Recent Transactions & Wallets & Top Spending -->
+<!-- Recent Transactions & Top Spending -->
 <div class="row mb-4">
     <!-- Giao dịch gần đây -->
     <div class="col-lg-6">
@@ -291,46 +284,9 @@ $page_title = 'Dashboard - ' . APP_NAME;
         </div>
     </div>
     
-    <!-- Ví của tôi & Top Chi Tiêu -->
+    <!-- Top Chi Tiêu Tháng -->
     <div class="col-lg-6">
-        <!-- Ví của tôi -->
-        <div class="card border-0 shadow-sm mb-3">
-            <div class="card-header bg-white border-bottom">
-                <h6 class="mb-0"><i class="fas fa-wallet"></i> Ví của tôi</h6>
-            </div>
-            <div class="card-body">
-                <?php if (count($wallets) === 0): ?>
-                    <p class="text-muted mb-0">Chưa có ví nào. <a href="<?php echo BASE_URL; ?>wallets.php">Tạo ví</a></p>
-                <?php else: ?>
-                    <div class="wallet-list">
-                        <?php 
-                        $wallet_total_balance = array_sum(array_column($wallets, 'balance'));
-                        foreach ($wallets as $wallet): 
-                            $wallet_percentage = $wallet_total_balance > 0 ? ($wallet['balance'] / $wallet_total_balance) * 100 : 0;
-                        ?>
-                        <div class="wallet-item mb-3">
-                            <div class="d-flex justify-content-between align-items-center mb-2">
-                                <div class="fw-bold"><?php echo e($wallet['name']); ?></div>
-                                <div class="text-end">
-                                    <div class="fw-bold"><?php echo formatCurrency($wallet['balance']); ?></div>
-                                    <small class="text-muted"><?php echo round($wallet_percentage, 0); ?>%</small>
-                                </div>
-                            </div>
-                            <div class="progress" style="height: 8px;">
-                                <div class="progress-bar bg-primary" role="progressbar" style="width: <?php echo $wallet_percentage; ?>%"></div>
-                            </div>
-                        </div>
-                        <?php endforeach; ?>
-                    </div>
-                    <a href="<?php echo BASE_URL; ?>wallets.php" class="btn btn-sm btn-outline-primary w-100 mt-3">
-                        Quản lý ví
-                    </a>
-                <?php endif; ?>
-            </div>
-        </div>
-        
-        <!-- Top Chi Tiêu Tháng -->
-        <div class="card border-0 shadow-sm">
+        <div class="card border-0 shadow-sm h-100">
             <div class="card-header bg-white border-bottom">
                 <h6 class="mb-0"><i class="fas fa-fire"></i> Top Chi Tiêu Tháng <?php echo $month; ?></h6>
             </div>
@@ -358,69 +314,6 @@ $page_title = 'Dashboard - ' . APP_NAME;
                     </div>
                     <?php endif; ?>
                 </div>
-            </div>
-        </div>
-    </div>
-</div>
-
-<!-- Wallet Detail Modal -->
-<div class="modal fade" id="walletDetailModal" tabindex="-1" aria-labelledby="walletDetailModalLabel" aria-hidden="true">
-    <div class="modal-dialog modal-dialog-centered">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title" id="walletDetailModalLabel"><i class="fas fa-piggy-bank"></i> Chi Tiết Tổng Số Dư Ví</h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Đóng"></button>
-            </div>
-            <div class="modal-body">
-                <div class="list-group mb-3">
-                    <div class="list-group-item d-flex justify-content-between align-items-center">
-                        <div>
-                            <strong>Tiền mặt</strong>
-                            <div class="text-muted small">Ví tiền mặt</div>
-                        </div>
-                        <span><?php echo formatCurrency($wallet_cash_total); ?></span>
-                    </div>
-                    <div class="list-group-item d-flex justify-content-between align-items-center">
-                        <div>
-                            <strong>Số dư tài khoản</strong>
-                            <div class="text-muted small">Tất cả ví không phải tiền mặt hoặc tiết kiệm</div>
-                        </div>
-                        <span><?php echo formatCurrency($wallet_account_total); ?></span>
-                    </div>
-                    <div class="list-group-item d-flex justify-content-between align-items-center">
-                        <div>
-                            <strong>Khoản tiết kiệm</strong>
-                            <div class="text-muted small">Ví tiết kiệm</div>
-                        </div>
-                        <span><?php echo formatCurrency($wallet_savings_total); ?></span>
-                    </div>
-                </div>
-                <?php if (count($wallets) === 0): ?>
-                <div class="alert alert-secondary" role="alert">
-                    Bạn chưa có ví nào. Hãy tạo ví để xem báo cáo chi tiết.
-                </div>
-                <?php endif; ?>
-                <div class="border-top pt-3">
-                    <div class="d-flex justify-content-between align-items-center mb-2">
-                        <strong>Tổng cộng</strong>
-                        <strong><?php echo formatCurrency($dashboard['wallet_total']); ?></strong>
-                    </div>
-                    <?php if (count($wallets) > 0): ?>
-                    <div class="small text-muted mb-2">Chi tiết các ví hiện có:</div>
-                    <ul class="list-group list-group-flush">
-                        <?php foreach ($wallets as $wallet): ?>
-                        <li class="list-group-item d-flex justify-content-between align-items-center">
-                            <?php echo e($wallet['name']); ?>
-                            <span><?php echo formatCurrency($wallet['balance']); ?></span>
-                        </li>
-                        <?php endforeach; ?>
-                    </ul>
-                    <?php endif; ?>
-                </div>
-            </div>
-            <div class="modal-footer">
-                <a href="<?php echo BASE_URL; ?>wallets.php" class="btn btn-outline-primary">Quản lý ví</a>
-                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Đóng</button>
             </div>
         </div>
     </div>
@@ -477,7 +370,6 @@ new Chart(pieCtx, {
 
 // Bar Chart Data
 const monthLabels = <?php echo json_encode($months_labels); ?>;
-const incomeData = <?php echo json_encode($monthly_income); ?>;
 const expenseData = <?php echo json_encode($monthly_expense); ?>;
 
 const barCtx = document.getElementById('barChart').getContext('2d');
@@ -486,12 +378,6 @@ new Chart(barCtx, {
     data: {
         labels: monthLabels,
         datasets: [
-            {
-                label: 'Thu',
-                data: incomeData,
-                backgroundColor: '#45c49f',
-                borderRadius: 4
-            },
             {
                 label: 'Chi',
                 data: expenseData,
