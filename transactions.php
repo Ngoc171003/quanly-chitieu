@@ -37,7 +37,8 @@ $filters = [
     'type' => !empty($filter_type) ? strtolower($filter_type) : '',
     'category_id' => !empty($filter_category) ? intval($filter_category) : '',
     'date_from' => !empty($filter_date_from) ? $filter_date_from : '',
-    'date_to' => !empty($filter_date_to) ? $filter_date_to : ''
+    'date_to' => !empty($filter_date_to) ? $filter_date_to : '',
+    'sort' => $_GET['sort'] ?? 'desc'
 ];
 
 // Get transactions using parameterized query function
@@ -59,7 +60,7 @@ $page_title = 'Giao Dịch - ' . APP_NAME;
 <div class="card border-0 shadow-sm mb-4">
     <div class="card-body">
         <form method="GET" class="row g-3">
-            <div class="col-md-2">
+            <div class="col-lg-2 col-md-4">
                 <label class="form-label">Loại</label>
                 <select name="type" class="form-select">
                             <option value="">Tất Cả</option>
@@ -67,7 +68,7 @@ $page_title = 'Giao Dịch - ' . APP_NAME;
                     <option value="chi" <?php echo strtolower($filter_type) == 'chi' ? 'selected' : ''; ?>>Chi</option>
                 </select>
             </div>
-            <div class="col-md-2">
+            <div class="col-lg-2 col-md-4">
                 <label class="form-label">Danh Mục</label>
                 <select name="category" class="form-select">
                     <option value="">Tất Cả</option>
@@ -78,15 +79,22 @@ $page_title = 'Giao Dịch - ' . APP_NAME;
                     <?php endwhile; ?>
                 </select>
             </div>
-            <div class="col-md-2">
+            <div class="col-lg-2 col-md-4">
                 <label class="form-label">Từ Ngày</label>
                 <input type="date" name="date_from" class="form-control" value="<?php echo e($filter_date_from); ?>">
             </div>
-            <div class="col-md-2">
+            <div class="col-lg-2 col-md-4">
                 <label class="form-label">Đến Ngày</label>
                 <input type="date" name="date_to" class="form-control" value="<?php echo e($filter_date_to); ?>">
             </div>
-            <div class="col-md-2 d-flex align-items-end gap-2">
+            <div class="col-lg-2 col-md-4">
+                <label class="form-label">Sắp xếp</label>
+                <select name="sort" class="form-select">
+                    <option value="desc" <?php echo ($filters['sort'] == 'desc') ? 'selected' : ''; ?>>Mới nhất trước</option>
+                    <option value="asc" <?php echo ($filters['sort'] == 'asc') ? 'selected' : ''; ?>>Cũ nhất trước</option>
+                </select>
+            </div>
+            <div class="col-lg-2 col-md-4 d-flex align-items-end gap-2">
                 <button type="submit" class="btn btn-primary w-100">
                     <i class="fas fa-search"></i> Lọc
                 </button>

@@ -19,7 +19,7 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     
     <!-- Custom CSS -->
-    <link rel="stylesheet" href="<?php echo BASE_URL; ?>public/css/style.css?v=1.1">
+    <link rel="stylesheet" href="<?php echo BASE_URL; ?>public/css/style.css?v=1.3">
 </head>
 <body>
     <?php if (isAuthenticated()): ?>
@@ -51,6 +51,11 @@
                     <li class="nav-item">
                         <a class="nav-link" href="<?php echo BASE_URL; ?>budget.php">
                             <i class="fas fa-chart-pie"></i> Ngân sách
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="<?php echo BASE_URL; ?>statistics.php">
+                            <i class="fas fa-chart-bar"></i> Thống kê
                         </a>
                     </li>
                     <li class="nav-item dropdown">

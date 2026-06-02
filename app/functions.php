@@ -330,7 +330,12 @@ function getTransactions($user_id, $db, $filters = []) {
         $types .= 's';
     }
     
-    $query .= " ORDER BY t.transaction_date DESC, t.updated_at DESC";
+    $sort_order = 'DESC';
+    if (!empty($filters['sort']) && strtolower($filters['sort']) == 'asc') {
+        $sort_order = 'ASC';
+    }
+    
+    $query .= " ORDER BY t.transaction_date $sort_order, t.updated_at $sort_order";
     
     return $db->execute($query, $params, $types);
 }
@@ -396,5 +401,144 @@ function verifyCsrfToken($token) {
         return false;
     }
     return hash_equals($_SESSION['csrf_token'], $token);
+}
+
+/**
+ * Get daily income/expense statistics for a specific month
+ */
+function getDailyStats($user_id, $db, $month = null, $year = null) {
+    if (!$month) $month = date('m');
+    if (!$year) $year = date('Y');
+    
+    $month = intval($month);
+    $year = intval($year);
+    $start_date = sprintf('%04d-%02d-01', $year, $month);
+    $end_date = date('Y-m-t', strtotime($start_date));
+    $days_in_month = intval(date('t', strtotime($start_date)));
+    
+    $query = "SELECT 
+                DAY(t.transaction_date) as day,
+                SUM(CASE WHEN LOWER(c.type) = 'thu' THEN t.amount ELSE 0 END) as income,
+                SUM(CASE WHEN LOWER(c.type) = 'chi' THEN t.amount ELSE 0 END) as expense
+              FROM transactions t
+              JOIN categories c ON t.category_id = c.id
+              WHERE t.user_id = ?
+              AND t.transaction_date BETWEEN ? AND ?
+              GROUP BY DAY(t.transaction_date)
+              ORDER BY day ASC";
+    
+    $result = $db->execute($query, [$user_id, $start_date, $end_date]);
+    
+    $data = [];
+    while ($row = $result->fetch_assoc()) {
+        $data[intval($row['day'])] = [
+            'income' => floatval($row['income']),
+            'expense' => floatval($row['expense'])
+        ];
+    }
+    
+    $labels = [];
+    $incomes = [];
+    $expenses = [];
+    for ($d = 1; $d <= $days_in_month; $d++) {
+        $labels[] = sprintf('%02d/%02d', $d, $month);
+        $incomes[] = $data[$d]['income'] ?? 0;
+        $expenses[] = $data[$d]['expense'] ?? 0;
+    }
+    
+    return [
+        'labels' => $labels,
+        'incomes' => $incomes,
+        'expenses' => $expenses,
+        'total_income' => array_sum($incomes),
+        'total_expense' => array_sum($expenses),
+        'days_in_month' => $days_in_month
+    ];
+}
+
+/**
+ * Get monthly income/expense statistics for a year (processed arrays)
+ */
+function getMonthlyStatsProcessed($user_id, $db, $year = null) {
+    if (!$year) $year = date('Y');
+    $year = intval($year);
+    
+    $result = getMonthlySummary($user_id, $db, $year);
+    
+    $data = [];
+    while ($row = $result->fetch_assoc()) {
+        $m = intval($row['month']);
+        $data[$m] = [
+            'income' => floatval($row['income']),
+            'expense' => floatval($row['expenses'])
+        ];
+    }
+    
+    $labels = [];
+    $incomes = [];
+    $expenses = [];
+    for ($m = 1; $m <= 12; $m++) {
+        $labels[] = 'Tháng ' . $m;
+        $incomes[] = $data[$m]['income'] ?? 0;
+        $expenses[] = $data[$m]['expense'] ?? 0;
+    }
+    
+    return [
+        'labels' => $labels,
+        'incomes' => $incomes,
+        'expenses' => $expenses,
+        'total_income' => array_sum($incomes),
+        'total_expense' => array_sum($expenses)
+    ];
+}
+
+/**
+ * Get yearly income/expense statistics across all years
+ */
+function getYearlyStats($user_id, $db) {
+    $query = "SELECT 
+                YEAR(t.transaction_date) as year,
+                SUM(CASE WHEN LOWER(c.type) = 'thu' THEN t.amount ELSE 0 END) as income,
+                SUM(CASE WHEN LOWER(c.type) = 'chi' THEN t.amount ELSE 0 END) as expense
+              FROM transactions t
+              JOIN categories c ON t.category_id = c.id
+              WHERE t.user_id = ?
+              GROUP BY YEAR(t.transaction_date)
+              ORDER BY year ASC";
+    
+    $result = $db->execute($query, [$user_id]);
+    
+    $labels = [];
+    $incomes = [];
+    $expenses = [];
+    while ($row = $result->fetch_assoc()) {
+        $labels[] = 'Năm ' . $row['year'];
+        $incomes[] = floatval($row['income']);
+        $expenses[] = floatval($row['expense']);
+    }
+    
+    if (empty($labels)) {
+        $labels[] = 'Năm ' . date('Y');
+        $incomes[] = 0;
+        $expenses[] = 0;
+    }
+    
+    return [
+        'labels' => $labels,
+        'incomes' => $incomes,
+        'expenses' => $expenses,
+        'total_income' => array_sum($incomes),
+        'total_expense' => array_sum($expenses)
+    ];
+}
+
+/**
+ * Get transaction count for a date range
+ */
+function getTransactionCount($user_id, $db, $start_date, $end_date) {
+    $query = "SELECT COUNT(*) as count FROM transactions 
+              WHERE user_id = ? AND transaction_date BETWEEN ? AND ?";
+    $result = $db->execute($query, [$user_id, $start_date, $end_date]);
+    return intval($result->fetch_assoc()['count'] ?? 0);
 }
 
