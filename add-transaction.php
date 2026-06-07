@@ -76,6 +76,14 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                 
                 if ($insert_result !== false) {
                     $success = 'Giao dịch đã được thêm!';
+                    
+                    // Check and send budget alert for expense transactions
+                    if ($category_type === 'chi') {
+                        $trans_month = intval(date('m', strtotime($transaction_date)));
+                        $trans_year = intval(date('Y', strtotime($transaction_date)));
+                        checkAndSendBudgetAlert($user_id, $db, $trans_month, $trans_year);
+                    }
+                    
                     header('Refresh: 1; URL=' . BASE_URL . 'transactions.php');
                 } else {
                     $error = 'Có lỗi khi thêm giao dịch!';

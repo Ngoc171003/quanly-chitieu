@@ -22,7 +22,11 @@
     <link rel="stylesheet" href="<?php echo BASE_URL; ?>public/css/style.css?v=1.3">
 </head>
 <body>
-    <?php if (isAuthenticated()): ?>
+    <?php if (isAuthenticated()): 
+        // Ensure avatar and currency are loaded into session
+        if (!isset($_SESSION['user_avatar'])) getUserAvatar($_SESSION['user_id'], $db);
+        if (!isset($_SESSION['user_currency'])) getUserCurrencyCode($_SESSION['user_id'], $db);
+    ?>
     <nav class="navbar navbar-expand-lg navbar-dark bg-primary sticky-top">
         <div class="container-fluid">
             <a class="navbar-brand" href="<?php echo BASE_URL; ?>dashboard.php">
@@ -59,8 +63,13 @@
                         </a>
                     </li>
                     <li class="nav-item dropdown">
-                        <a class="nav-link dropdown-toggle" href="#" id="userDropdown" role="button" data-bs-toggle="dropdown">
-                            <i class="fas fa-user-circle"></i> <?php echo e($_SESSION['user_name'] ?? 'User'); ?>
+                        <a class="nav-link dropdown-toggle d-flex align-items-center gap-2" href="#" id="userDropdown" role="button" data-bs-toggle="dropdown">
+                            <?php if (!empty($_SESSION['user_avatar'])): ?>
+                                <img src="<?php echo BASE_URL . e($_SESSION['user_avatar']); ?>" alt="Avatar" class="rounded-circle object-fit-cover" style="width: 28px; height: 28px; border: 1px solid rgba(255,255,255,0.5);">
+                            <?php else: ?>
+                                <i class="fas fa-user-circle fs-5"></i>
+                            <?php endif; ?>
+                            <span><?php echo e($_SESSION['user_name'] ?? 'User'); ?></span>
                         </a>
                         <ul class="dropdown-menu dropdown-menu-end">
                             <li><a class="dropdown-item" href="<?php echo BASE_URL; ?>profile.php">Hồ sơ</a></li>

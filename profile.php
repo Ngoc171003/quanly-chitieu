@@ -10,7 +10,7 @@ $error = '';
 $success = '';
 
 // Get user info using parameterized query
-$user_query = "SELECT id, username, email, full_name, created_at FROM users WHERE id = ?";
+$user_query = "SELECT id, username, email, full_name, avatar, currency, created_at FROM users WHERE id = ?";
 $user_result = $db->execute($user_query, [$user_id]);
 $user = $user_result && $user_result->num_rows > 0 ? $user_result->fetch_assoc() : null;
 
@@ -74,6 +74,40 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                 $error = 'Có lỗi khi cập nhật!';
             }
         }
+    } elseif ($action == 'avatar') {
+        if (isset($_FILES['avatar_file'])) {
+            $upload = handleAvatarUpload($_FILES['avatar_file'], $user_id);
+            if ($upload['success']) {
+                $old_avatar = $user['avatar'];
+                if ($old_avatar) {
+                    deleteAvatar($old_avatar);
+                }
+                $update = "UPDATE users SET avatar = ? WHERE id = ?";
+                $db->execute($update, [$upload['path'], $user_id]);
+                $_SESSION['user_avatar'] = $upload['path'];
+                $user['avatar'] = $upload['path'];
+                $success = 'Ảnh đại diện đã được cập nhật!';
+            } else {
+                $error = $upload['error'];
+            }
+        }
+    } elseif ($action == 'remove_avatar') {
+        if ($user['avatar']) {
+            deleteAvatar($user['avatar']);
+            $update = "UPDATE users SET avatar = NULL WHERE id = ?";
+            $db->execute($update, [$user_id]);
+            unset($_SESSION['user_avatar']);
+            $user['avatar'] = null;
+            $success = 'Đã xóa ảnh đại diện!';
+        }
+    } elseif ($action == 'currency') {
+        $currency = $_POST['currency'] ?? 'VND';
+        if (Currency::setUserCurrency($user_id, $db, $currency)) {
+            $user['currency'] = $currency;
+            $success = 'Tiền tệ hiển thị đã được cập nhật!';
+        } else {
+            $error = 'Tiền tệ không hợp lệ!';
+        }
     }
 }
 }
@@ -108,13 +142,42 @@ $page_title = 'Hồ Sơ - ' . APP_NAME;
         <div class="card border-0 shadow-sm">
             <div class="card-body text-center">
                 <div class="mb-3">
-                    <div class="rounded-circle bg-primary text-white d-inline-flex align-items-center justify-content-center" 
-                         style="width: 80px; height: 80px; font-size: 2rem;">
-                        <i class="fas fa-user"></i>
-                    </div>
+                    <?php if (!empty($user['avatar'])): ?>
+                        <img src="<?php echo BASE_URL . e($user['avatar']); ?>" alt="Avatar" class="rounded-circle mb-3 object-fit-cover shadow-sm" style="width: 120px; height: 120px; border: 3px solid white;">
+                    <?php else: ?>
+                        <div class="rounded-circle bg-primary text-white d-inline-flex align-items-center justify-content-center shadow-sm" 
+                             style="width: 120px; height: 120px; font-size: 3rem; border: 3px solid white;">
+                            <i class="fas fa-user"></i>
+                        </div>
+                    <?php endif; ?>
                 </div>
                 <h5><?php echo e($user['full_name']); ?></h5>
-                <p class="text-muted small"><?php echo e($user['email']); ?></p>
+                <p class="text-muted small mb-3"><?php echo e($user['email']); ?></p>
+                
+                <hr>
+                
+                <form method="POST" enctype="multipart/form-data" class="text-start">
+                    <input type="hidden" name="action" value="avatar">
+                    <input type="hidden" name="csrf_token" value="<?php echo generateCsrfToken(); ?>">
+                    <div class="mb-2">
+                        <label class="form-label small fw-bold">Đổi ảnh đại diện</label>
+                        <input type="file" name="avatar_file" class="form-control form-control-sm" accept="image/jpeg,image/png,image/gif,image/webp" required>
+                        <small class="text-muted" style="font-size: 0.7rem;">Tối đa 2MB (JPG, PNG, GIF)</small>
+                    </div>
+                    <button type="submit" class="btn btn-primary btn-sm w-100 mb-2">
+                        <i class="fas fa-upload"></i> Tải ảnh lên
+                    </button>
+                </form>
+                
+                <?php if (!empty($user['avatar'])): ?>
+                <form method="POST" class="text-start" onsubmit="return confirm('Bạn có chắc muốn xóa ảnh đại diện?');">
+                    <input type="hidden" name="action" value="remove_avatar">
+                    <input type="hidden" name="csrf_token" value="<?php echo generateCsrfToken(); ?>">
+                    <button type="submit" class="btn btn-outline-danger btn-sm w-100">
+                        <i class="fas fa-trash"></i> Xóa ảnh
+                    </button>
+                </form>
+                <?php endif; ?>
             </div>
         </div>
     </div>
@@ -130,6 +193,11 @@ $page_title = 'Hồ Sơ - ' . APP_NAME;
             <li class="nav-item" role="presentation">
                 <button class="nav-link" id="password-tab" data-bs-toggle="tab" data-bs-target="#password" type="button" role="tab">
                     <i class="fas fa-lock"></i> Đổi Mật Khẩu
+                </button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="settings-tab" data-bs-toggle="tab" data-bs-target="#settings" type="button" role="tab">
+                    <i class="fas fa-cog"></i> Cài Đặt
                 </button>
             </li>
         </ul>
@@ -179,6 +247,40 @@ $page_title = 'Hồ Sơ - ' . APP_NAME;
                             </div>
                             <button type="submit" class="btn btn-primary">
                                 <i class="fas fa-lock"></i> Đổi Mật Khẩu
+                            </button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Settings Tab -->
+            <div class="tab-pane fade" id="settings" role="tabpanel">
+                <div class="card border-0 shadow-sm">
+                    <div class="card-body">
+                        <form method="POST">
+                            <input type="hidden" name="action" value="currency">
+                            <input type="hidden" name="csrf_token" value="<?php echo generateCsrfToken(); ?>">
+                            
+                            <h6 class="mb-3"><i class="fas fa-coins text-warning"></i> Đơn Vị Tiền Tệ</h6>
+                            <p class="text-muted small mb-3">Tất cả giao dịch sẽ được quy đổi và hiển thị theo đơn vị tiền tệ bạn chọn. Tỷ giá được lấy theo thời gian thực.</p>
+                            
+                            <div class="mb-4">
+                                <label class="form-label">Tiền tệ hiển thị</label>
+                                <select name="currency" class="form-select" required>
+                                    <?php 
+                                    $currencies = Currency::getSupportedCurrencies();
+                                    $userCurrency = $user['currency'] ?? 'VND';
+                                    foreach ($currencies as $code => $info): 
+                                    ?>
+                                    <option value="<?php echo $code; ?>" <?php echo $code === $userCurrency ? 'selected' : ''; ?>>
+                                        <?php echo $code; ?> - <?php echo $info['name']; ?> (<?php echo $info['symbol']; ?>)
+                                    </option>
+                                    <?php endforeach; ?>
+                                </select>
+                            </div>
+                            
+                            <button type="submit" class="btn btn-primary">
+                                <i class="fas fa-save"></i> Lưu Cài Đặt
                             </button>
                         </form>
                     </div>

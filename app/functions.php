@@ -1,11 +1,24 @@
 <?php
+require_once __DIR__ . '/Currency.php';
+require_once __DIR__ . '/Mailer.php';
+
 // Utility Functions
 
 /**
- * Format currency to VND
+ * Format currency - supports multi-currency based on user setting
  */
-function formatCurrency($amount) {
-    return number_format($amount, 0, ',', '.') . ' ' . CURRENCY;
+function formatCurrency($amount, $targetCurrency = null) {
+    if ($targetCurrency === null) {
+        $targetCurrency = $_SESSION['user_currency'] ?? 'VND';
+    }
+    
+    if ($targetCurrency === 'VND') {
+        return number_format($amount, 0, ',', '.') . ' ' . CURRENCY;
+    }
+    
+    // Convert from VND to target currency
+    $converted = Currency::convert($amount, 'VND', $targetCurrency);
+    return Currency::format($converted, $targetCurrency);
 }
 
 /**
@@ -540,5 +553,182 @@ function getTransactionCount($user_id, $db, $start_date, $end_date) {
               WHERE user_id = ? AND transaction_date BETWEEN ? AND ?";
     $result = $db->execute($query, [$user_id, $start_date, $end_date]);
     return intval($result->fetch_assoc()['count'] ?? 0);
+}
+
+/**
+ * Check budget and send email alert if needed
+ * Called after adding an expense transaction
+ */
+function checkAndSendBudgetAlert($user_id, $db, $month = null, $year = null) {
+    if (!$month) $month = date('m');
+    if (!$year) $year = date('Y');
+    $month = intval($month);
+    $year = intval($year);
+    
+    // Get dashboard data
+    $data = getDashboardData($user_id, $db, $month, $year);
+    
+    // No budget set, skip
+    if ($data['budget'] <= 0) return false;
+    
+    $percentage = ($data['expenses'] / $data['budget']) * 100;
+    
+    // Get user info for email
+    $user_query = "SELECT full_name, email, currency FROM users WHERE id = ?";
+    $user_result = $db->execute($user_query, [$user_id]);
+    if (!$user_result || $user_result->num_rows == 0) return false;
+    $user = $user_result->fetch_assoc();
+    
+    if (empty($user['email'])) return false;
+    
+    $budgetData = [
+        'month' => $month,
+        'year' => $year,
+        'budget' => $data['budget'],
+        'spent' => $data['expenses'],
+        'remaining' => $data['budget_remaining'],
+        'overflow' => $data['budget_overflow'],
+        'percentage' => $percentage,
+        'currency' => $user['currency'] ?? 'VNĐ'
+    ];
+    
+    $sent = false;
+    
+    // Check if exceeded (≥100%)
+    if ($percentage >= BUDGET_EXCEEDED_THRESHOLD) {
+        // Check if already sent
+        $check = "SELECT id FROM budget_alerts WHERE user_id = ? AND month = ? AND year = ? AND alert_type = 'exceeded'";
+        $check_result = $db->execute($check, [$user_id, $month, $year]);
+        
+        if (!$check_result || $check_result->num_rows == 0) {
+            // Send exceeded alert
+            $emailSent = Mailer::sendBudgetExceeded($user['email'], $user['full_name'], $budgetData);
+            
+            // Record alert (use REPLACE to handle unique constraint)
+            $insert = "INSERT INTO budget_alerts (user_id, month, year, alert_type, percentage, budget_amount, spent_amount) 
+                       VALUES (?, ?, ?, 'exceeded', ?, ?, ?) 
+                       ON DUPLICATE KEY UPDATE percentage = ?, spent_amount = ?, sent_at = CURRENT_TIMESTAMP";
+            $db->execute($insert, [$user_id, $month, $year, $percentage, $data['budget'], $data['expenses'], $percentage, $data['expenses']]);
+            $sent = true;
+        }
+    }
+    // Check if warning (≥80% but <100%)
+    elseif ($percentage >= BUDGET_WARNING_THRESHOLD) {
+        $check = "SELECT id FROM budget_alerts WHERE user_id = ? AND month = ? AND year = ? AND alert_type = 'warning'";
+        $check_result = $db->execute($check, [$user_id, $month, $year]);
+        
+        if (!$check_result || $check_result->num_rows == 0) {
+            // Send warning alert
+            $emailSent = Mailer::sendBudgetWarning($user['email'], $user['full_name'], $budgetData);
+            
+            $insert = "INSERT INTO budget_alerts (user_id, month, year, alert_type, percentage, budget_amount, spent_amount) 
+                       VALUES (?, ?, ?, 'warning', ?, ?, ?) 
+                       ON DUPLICATE KEY UPDATE percentage = ?, spent_amount = ?, sent_at = CURRENT_TIMESTAMP";
+            $db->execute($insert, [$user_id, $month, $year, $percentage, $data['budget'], $data['expenses'], $percentage, $data['expenses']]);
+            $sent = true;
+        }
+    }
+    
+    return $sent;
+}
+
+/**
+ * Get user avatar URL
+ */
+function getUserAvatar($user_id, $db) {
+    // Check session first
+    if (isset($_SESSION['user_avatar'])) {
+        return $_SESSION['user_avatar'];
+    }
+    
+    $query = "SELECT avatar FROM users WHERE id = ?";
+    $result = $db->execute($query, [$user_id]);
+    
+    if ($result && $result->num_rows > 0) {
+        $row = $result->fetch_assoc();
+        if (!empty($row['avatar'])) {
+            $_SESSION['user_avatar'] = $row['avatar'];
+            return $row['avatar'];
+        }
+    }
+    
+    return null;
+}
+
+/**
+ * Get user's selected currency
+ */
+function getUserCurrencyCode($user_id, $db) {
+    return Currency::getUserCurrency($user_id, $db);
+}
+
+/**
+ * Handle avatar upload
+ * Returns: ['success' => bool, 'path' => string, 'error' => string]
+ */
+function handleAvatarUpload($file, $user_id) {
+    // Validate file
+    if (!isset($file) || $file['error'] !== UPLOAD_ERR_OK) {
+        $errorMessages = [
+            UPLOAD_ERR_INI_SIZE => 'File quá lớn (vượt quá giới hạn server)!',
+            UPLOAD_ERR_FORM_SIZE => 'File quá lớn!',
+            UPLOAD_ERR_PARTIAL => 'File chỉ được tải lên một phần!',
+            UPLOAD_ERR_NO_FILE => 'Không có file nào được chọn!',
+        ];
+        $error = $errorMessages[$file['error']] ?? 'Lỗi tải file!';
+        return ['success' => false, 'error' => $error];
+    }
+    
+    // Check file size
+    if ($file['size'] > AVATAR_MAX_SIZE) {
+        return ['success' => false, 'error' => 'Ảnh không được vượt quá 2MB!'];
+    }
+    
+    // Check file type
+    $finfo = new finfo(FILEINFO_MIME_TYPE);
+    $mimeType = $finfo->file($file['tmp_name']);
+    
+    if (!in_array($mimeType, AVATAR_ALLOWED_TYPES)) {
+        return ['success' => false, 'error' => 'Chỉ chấp nhận file ảnh JPG, PNG, GIF, WEBP!'];
+    }
+    
+    // Generate unique filename
+    $ext = pathinfo($file['name'], PATHINFO_EXTENSION);
+    $ext = strtolower($ext);
+    if (!in_array($ext, ['jpg', 'jpeg', 'png', 'gif', 'webp'])) {
+        $ext = 'jpg';
+    }
+    $filename = 'avatar_' . $user_id . '_' . time() . '.' . $ext;
+    
+    // Ensure upload directory exists
+    $uploadDir = __DIR__ . '/../' . AVATAR_UPLOAD_DIR;
+    if (!is_dir($uploadDir)) {
+        mkdir($uploadDir, 0755, true);
+    }
+    
+    $targetPath = $uploadDir . $filename;
+    
+    // Move file
+    if (move_uploaded_file($file['tmp_name'], $targetPath)) {
+        return [
+            'success' => true, 
+            'path' => AVATAR_UPLOAD_DIR . $filename,
+            'error' => ''
+        ];
+    }
+    
+    return ['success' => false, 'error' => 'Không thể lưu file!'];
+}
+
+/**
+ * Delete old avatar file
+ */
+function deleteAvatar($avatarPath) {
+    if (empty($avatarPath)) return;
+    
+    $fullPath = __DIR__ . '/../' . $avatarPath;
+    if (file_exists($fullPath)) {
+        @unlink($fullPath);
+    }
 }
 
