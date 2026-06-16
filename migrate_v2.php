@@ -35,32 +35,7 @@ if ($result->num_rows == 0) {
     echo "   ⏭️ Cột 'currency' đã tồn tại\n";
 }
 
-// 3. Create budget_alerts table
-echo "\n3. Tạo bảng 'budget_alerts'...\n";
-$result = $conn->query("SHOW TABLES LIKE 'budget_alerts'");
-if ($result->num_rows == 0) {
-    $sql = "CREATE TABLE budget_alerts (
-        id INT PRIMARY KEY AUTO_INCREMENT,
-        user_id INT NOT NULL,
-        month INT NOT NULL,
-        year INT NOT NULL,
-        alert_type ENUM('warning','exceeded') NOT NULL,
-        percentage DECIMAL(5,2) DEFAULT 0,
-        budget_amount DECIMAL(15,2) DEFAULT 0,
-        spent_amount DECIMAL(15,2) DEFAULT 0,
-        sent_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        CONSTRAINT fk_alert_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
-        UNIQUE KEY unique_alert (user_id, month, year, alert_type),
-        INDEX idx_user_period (user_id, year, month)
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4";
-    if ($conn->query($sql)) {
-        echo "   ✅ Đã tạo bảng 'budget_alerts'\n";
-    } else {
-        echo "   ❌ Lỗi: " . $conn->error . "\n";
-    }
-} else {
-    echo "   ⏭️ Bảng 'budget_alerts' đã tồn tại\n";
-}
+// 3. (Removed) - budget_alerts table no longer needed
 
 // 4. Create uploads directory
 echo "\n4. Tạo thư mục uploads/avatars...\n";

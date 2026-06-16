@@ -19,8 +19,13 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
         $year = intval($_POST['year'] ?? $year);
     $amount = floatval($_POST['amount'] ?? 0);
     
+    // Fetch dashboard data for the selected month to get current expenses
+    $post_dashboard = getDashboardData($user_id, $db, $month, $year);
+    
     if ($amount <= 0) {
         $error = 'Số tiền phải lớn hơn 0!';
+    } elseif ($amount > $post_dashboard['income']) {
+        $error = 'Giới hạn chi tiêu không được lớn hơn tổng thu của tháng (' . formatCurrency($post_dashboard['income']) . ')!';
     } else {
         // Check if budget exists using parameterized query
         $check = "SELECT id FROM budgets WHERE user_id = ? AND month = ? AND year = ?";
@@ -147,12 +152,21 @@ $page_title = 'Ngân Sách - ' . APP_NAME;
                 <?php
                 $dashboard = getDashboardData($user_id, $db, $month, $year);
                 if ($current_budget > 0):
-                    $percentage = min(100, ($dashboard['expenses'] / $current_budget) * 100);
-                    $progress_class = $percentage > 100 ? 'bg-danger' : ($percentage > 80 ? 'bg-warning' : 'bg-success');
+                    $percentage = ($dashboard['expenses'] / $current_budget) * 100;
+                    if ($percentage > 100) {
+                        $progress_class = 'bg-danger';
+                    } elseif ($percentage > 90) {
+                        $progress_class = 'bg-warning';
+                    } elseif ($percentage > 70) {
+                        $progress_class = 'bg-warning';
+                    } else {
+                        $progress_class = 'bg-success';
+                    }
+                    $display_percentage = min(100, $percentage);
                 ?>
                 <h5>Ngân Sách: <?php echo formatCurrency($current_budget); ?></h5>
                 <div class="progress mb-3" style="height: 25px;">
-                    <div class="progress-bar <?php echo $progress_class; ?>" role="progressbar" style="width: <?php echo $percentage; ?>%">
+                    <div class="progress-bar <?php echo $progress_class; ?>" role="progressbar" style="width: <?php echo $display_percentage; ?>%">
                         <?php echo round($percentage, 1); ?>%
                     </div>
                 </div>

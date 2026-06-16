@@ -73,7 +73,7 @@ $page_title = 'Dashboard - ' . APP_NAME;
             </select>
         </div>
         <a href="<?php echo BASE_URL; ?>export.php?month=<?php echo $month; ?>&year=<?php echo $year; ?>" class="btn btn-primary export-btn" style="white-space: nowrap;">
-            <i class="fas fa-download"></i> Xuất CSV
+            <i class="fas fa-file-excel"></i> Xuất Excel
         </a>
     </div>
 </div>

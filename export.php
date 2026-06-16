@@ -31,10 +31,10 @@ $page_title = 'Xuất Dữ Liệu - ' . APP_NAME;
     <div class="col-md-8">
         <div class="card border-0 shadow-sm">
             <div class="card-header bg-primary text-white">
-                <h5 class="mb-0"><i class="fas fa-file-csv"></i> Xuất File CSV</h5>
+                <h5 class="mb-0"><i class="fas fa-file-excel"></i> Xuất File Excel</h5>
             </div>
             <div class="card-body">
-                <p class="text-muted">Xuất dữ liệu giao dịch của bạn ra file CSV để sử dụng trong Excel hoặc các ứng dụng khác.</p>
+                <p class="text-muted">Xuất dữ liệu giao dịch của bạn ra file Excel (.xlsx) để quản lý chi tiêu dễ dàng hơn.</p>
                 
                 <form method="POST" action="<?php echo BASE_URL; ?>api/export.php">
                     <input type="hidden" name="csrf_token" value="<?php echo generateCsrfToken(); ?>">
@@ -63,11 +63,11 @@ $page_title = 'Xuất Dữ Liệu - ' . APP_NAME;
 
                     <div class="alert alert-info mt-4 mb-4" role="alert">
                         <i class="fas fa-info-circle"></i> 
-                        <strong>Thông tin:</strong> File CSV sẽ bao gồm tất cả giao dịch, tổng hợp thu chi và số dư của tháng bạn chọn.
+                        <strong>Thông tin:</strong> File Excel sẽ bao gồm tất cả giao dịch, tổng hợp thu chi và số dư của tháng bạn chọn.
                     </div>
 
                     <button type="submit" class="btn btn-primary btn-lg w-100">
-                        <i class="fas fa-download"></i> Tải File CSV
+                        <i class="fas fa-download"></i> Tải File Excel
                     </button>
                 </form>
 
@@ -76,7 +76,7 @@ $page_title = 'Xuất Dữ Liệu - ' . APP_NAME;
                 <h6 class="mb-3"><i class="fas fa-lightbulb"></i> Hướng dẫn sử dụng:</h6>
                 <ul class="small text-muted">
                     <li>Chọn tháng và năm muốn xuất dữ liệu</li>
-                    <li>Nhấn nút "Tải File CSV" để tải về máy tính</li>
+                    <li>Nhấn nút "Tải File Excel" để tải về máy tính</li>
                     <li>Mở file bằng Excel, Google Sheets hoặc bất kỳ ứng dụng bảng tính nào</li>
                     <li>File sẽ chứa danh sách giao dịch và tóm tắt tài chính của tháng</li>
                 </ul>

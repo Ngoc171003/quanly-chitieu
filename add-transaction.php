@@ -64,7 +64,17 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                     
                     if ($update_result !== false) {
                         $success = 'Giao dịch đã được cập nhật!';
-                        header('Refresh: 1; URL=' . BASE_URL . 'transactions.php');
+                        if ($category_type == 'chi') {
+                            $trans_month = date('m', strtotime($transaction_date));
+                            $trans_year = date('Y', strtotime($transaction_date));
+                            $trans_dashboard = getDashboardData($user_id, $db, $trans_month, $trans_year);
+                            
+                            if ($trans_dashboard['budget'] > 0 && $trans_dashboard['expenses'] > $trans_dashboard['budget']) {
+                                $success .= '<br><strong>Cảnh báo: Giao dịch này làm bạn vượt quá ngân sách tháng!</strong>';
+                                $warning_script = "<script>alert('Cảnh báo: Giao dịch này làm bạn vượt quá ngân sách tháng!');</script>";
+                            }
+                        }
+                        header('Refresh: 2; URL=' . BASE_URL . 'transactions.php');
                     } else {
                         $error = 'Có lỗi khi cập nhật!';
                     }
@@ -76,15 +86,17 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                 
                 if ($insert_result !== false) {
                     $success = 'Giao dịch đã được thêm!';
-                    
-                    // Check and send budget alert for expense transactions
-                    if ($category_type === 'chi') {
-                        $trans_month = intval(date('m', strtotime($transaction_date)));
-                        $trans_year = intval(date('Y', strtotime($transaction_date)));
-                        checkAndSendBudgetAlert($user_id, $db, $trans_month, $trans_year);
+                    if ($category_type == 'chi') {
+                        $trans_month = date('m', strtotime($transaction_date));
+                        $trans_year = date('Y', strtotime($transaction_date));
+                        $trans_dashboard = getDashboardData($user_id, $db, $trans_month, $trans_year);
+                        
+                        if ($trans_dashboard['budget'] > 0 && $trans_dashboard['expenses'] > $trans_dashboard['budget']) {
+                            $success .= '<br><strong>Cảnh báo: Giao dịch này làm bạn vượt quá ngân sách tháng!</strong>';
+                            $warning_script = "<script>alert('Cảnh báo: Giao dịch này làm bạn vượt quá ngân sách tháng!');</script>";
+                        }
                     }
-                    
-                    header('Refresh: 1; URL=' . BASE_URL . 'transactions.php');
+                    header('Refresh: 2; URL=' . BASE_URL . 'transactions.php');
                 } else {
                     $error = 'Có lỗi khi thêm giao dịch!';
                 }
@@ -114,17 +126,19 @@ $page_title = ($trans_id ? 'Sửa' : 'Thêm') . ' Giao Dịch - ' . APP_NAME;
             <div class="card-body">
                 <?php if ($error): ?>
                 <div class="alert alert-danger alert-dismissible fade show" role="alert">
-                    <?php echo e($error); ?>
+                    <?php echo $error; ?>
                     <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
                 </div>
                 <?php endif; ?>
 
                 <?php if ($success): ?>
                 <div class="alert alert-success alert-dismissible fade show" role="alert">
-                    <?php echo e($success); ?>
+                    <?php echo $success; ?>
                     <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
                 </div>
                 <?php endif; ?>
+                
+                <?php if (isset($warning_script)) echo $warning_script; ?>
 
                 <form method="POST">
                     <input type="hidden" name="csrf_token" value="<?php echo generateCsrfToken(); ?>">

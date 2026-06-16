@@ -1,6 +1,5 @@
 <?php
 require_once __DIR__ . '/Currency.php';
-require_once __DIR__ . '/Mailer.php';
 
 // Utility Functions
 
@@ -555,82 +554,6 @@ function getTransactionCount($user_id, $db, $start_date, $end_date) {
     return intval($result->fetch_assoc()['count'] ?? 0);
 }
 
-/**
- * Check budget and send email alert if needed
- * Called after adding an expense transaction
- */
-function checkAndSendBudgetAlert($user_id, $db, $month = null, $year = null) {
-    if (!$month) $month = date('m');
-    if (!$year) $year = date('Y');
-    $month = intval($month);
-    $year = intval($year);
-    
-    // Get dashboard data
-    $data = getDashboardData($user_id, $db, $month, $year);
-    
-    // No budget set, skip
-    if ($data['budget'] <= 0) return false;
-    
-    $percentage = ($data['expenses'] / $data['budget']) * 100;
-    
-    // Get user info for email
-    $user_query = "SELECT full_name, email, currency FROM users WHERE id = ?";
-    $user_result = $db->execute($user_query, [$user_id]);
-    if (!$user_result || $user_result->num_rows == 0) return false;
-    $user = $user_result->fetch_assoc();
-    
-    if (empty($user['email'])) return false;
-    
-    $budgetData = [
-        'month' => $month,
-        'year' => $year,
-        'budget' => $data['budget'],
-        'spent' => $data['expenses'],
-        'remaining' => $data['budget_remaining'],
-        'overflow' => $data['budget_overflow'],
-        'percentage' => $percentage,
-        'currency' => $user['currency'] ?? 'VNĐ'
-    ];
-    
-    $sent = false;
-    
-    // Check if exceeded (≥100%)
-    if ($percentage >= BUDGET_EXCEEDED_THRESHOLD) {
-        // Check if already sent
-        $check = "SELECT id FROM budget_alerts WHERE user_id = ? AND month = ? AND year = ? AND alert_type = 'exceeded'";
-        $check_result = $db->execute($check, [$user_id, $month, $year]);
-        
-        if (!$check_result || $check_result->num_rows == 0) {
-            // Send exceeded alert
-            $emailSent = Mailer::sendBudgetExceeded($user['email'], $user['full_name'], $budgetData);
-            
-            // Record alert (use REPLACE to handle unique constraint)
-            $insert = "INSERT INTO budget_alerts (user_id, month, year, alert_type, percentage, budget_amount, spent_amount) 
-                       VALUES (?, ?, ?, 'exceeded', ?, ?, ?) 
-                       ON DUPLICATE KEY UPDATE percentage = ?, spent_amount = ?, sent_at = CURRENT_TIMESTAMP";
-            $db->execute($insert, [$user_id, $month, $year, $percentage, $data['budget'], $data['expenses'], $percentage, $data['expenses']]);
-            $sent = true;
-        }
-    }
-    // Check if warning (≥80% but <100%)
-    elseif ($percentage >= BUDGET_WARNING_THRESHOLD) {
-        $check = "SELECT id FROM budget_alerts WHERE user_id = ? AND month = ? AND year = ? AND alert_type = 'warning'";
-        $check_result = $db->execute($check, [$user_id, $month, $year]);
-        
-        if (!$check_result || $check_result->num_rows == 0) {
-            // Send warning alert
-            $emailSent = Mailer::sendBudgetWarning($user['email'], $user['full_name'], $budgetData);
-            
-            $insert = "INSERT INTO budget_alerts (user_id, month, year, alert_type, percentage, budget_amount, spent_amount) 
-                       VALUES (?, ?, ?, 'warning', ?, ?, ?) 
-                       ON DUPLICATE KEY UPDATE percentage = ?, spent_amount = ?, sent_at = CURRENT_TIMESTAMP";
-            $db->execute($insert, [$user_id, $month, $year, $percentage, $data['budget'], $data['expenses'], $percentage, $data['expenses']]);
-            $sent = true;
-        }
-    }
-    
-    return $sent;
-}
 
 /**
  * Get user avatar URL
