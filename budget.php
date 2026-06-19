@@ -8,6 +8,9 @@ requireAuth($db);
 $user_id = $_SESSION['user_id'];
 $error = '';
 $success = '';
+$show_budget_warning = false;
+$warning_amount = 0;
+$warning_income = 0;
 $month = isset($_GET['month']) ? intval($_GET['month']) : date('m');
 $year = isset($_GET['year']) ? intval($_GET['year']) : date('Y');
 
@@ -22,10 +25,15 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     // Fetch dashboard data for the selected month to get current expenses
     $post_dashboard = getDashboardData($user_id, $db, $month, $year);
     
+    $confirm_override = isset($_POST['confirm_override']) && $_POST['confirm_override'] === '1';
+    
     if ($amount <= 0) {
         $error = 'Số tiền phải lớn hơn 0!';
-    } elseif ($amount > $post_dashboard['income']) {
-        $error = 'Giới hạn chi tiêu không được lớn hơn tổng thu của tháng (' . formatCurrency($post_dashboard['income']) . ')!';
+    } elseif ($amount > $post_dashboard['income'] && !$confirm_override) {
+        // Show warning modal instead of rejecting
+        $show_budget_warning = true;
+        $warning_amount = $amount;
+        $warning_income = $post_dashboard['income'];
     } else {
         // Check if budget exists using parameterized query
         $check = "SELECT id FROM budgets WHERE user_id = ? AND month = ? AND year = ?";
@@ -105,8 +113,9 @@ $page_title = 'Ngân Sách - ' . APP_NAME;
                 <h6 class="mb-0"><i class="fas fa-cog"></i> Thiết Lập Ngân Sách</h6>
             </div>
             <div class="card-body">
-                <form method="POST">
+                <form method="POST" id="budgetForm">
                     <input type="hidden" name="csrf_token" value="<?php echo generateCsrfToken(); ?>">
+                    <input type="hidden" name="confirm_override" id="confirmOverride" value="0">
                     <div class="mb-3">
                         <label class="form-label">Tháng <span class="text-danger">*</span></label>
                         <select name="month" id="budgetMonth" class="form-select" onchange="changeBudgetPeriod()" required>
@@ -130,8 +139,8 @@ $page_title = 'Ngân Sách - ' . APP_NAME;
                     <div class="mb-3">
                         <label class="form-label">Giới Hạn Chi Tiêu <span class="text-danger">*</span></label>
                         <div class="input-group">
-                            <input type="text" name="amount" class="form-control amount-input" placeholder="0" 
-                                   value="<?php echo (int)$current_budget; ?>" required>
+                            <input type="text" name="amount" id="budgetAmount" class="form-control amount-input" placeholder="0" 
+                                   value="<?php echo $show_budget_warning ? (int)$warning_amount : (int)$current_budget; ?>" required>
                             <span class="input-group-text"><?php echo CURRENCY; ?></span>
                         </div>
                     </div>
@@ -188,9 +197,17 @@ $page_title = 'Ngân Sách - ' . APP_NAME;
                 </div>
 
                 <?php if ($dashboard['expenses'] > $current_budget): ?>
-                <div class="alert alert-danger mt-3 mb-0">
+                <div class="alert alert-danger alert-persistent mt-3 mb-0" id="budgetExpensesWarning">
                     <i class="fas fa-exclamation-triangle"></i> 
                     <strong>Cảnh báo!</strong> Bạn đã vượt quá ngân sách <?php echo formatCurrency($dashboard['expenses'] - $current_budget); ?>!
+                </div>
+                <?php endif; ?>
+
+                <?php if ($current_budget > $dashboard['income']): ?>
+                <div class="alert alert-warning alert-persistent mt-3 mb-0" id="budgetLimitWarning">
+                    <i class="fas fa-exclamation-circle"></i> 
+                    Ngân sách hiện tại đang vượt quá tổng thu nhập của tháng là <strong><?php echo formatCurrency($current_budget - $dashboard['income']); ?></strong>. 
+                    Bạn nên điều chỉnh ngân sách hoặc tăng nguồn thu để đảm bảo kế hoạch tài chính.
                 </div>
                 <?php endif; ?>
 
@@ -236,12 +253,100 @@ $page_title = 'Ngân Sách - ' . APP_NAME;
     </div>
 </div>
 
+<!-- Budget Warning Modal -->
+<div class="modal fade" id="budgetWarningModal" tabindex="-1" aria-labelledby="budgetWarningModalLabel" aria-hidden="true" data-bs-backdrop="static" data-bs-keyboard="false">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header bg-warning text-dark">
+                <h5 class="modal-title" id="budgetWarningModalLabel">
+                    <i class="fas fa-exclamation-triangle"></i> Cảnh báo ngân sách
+                </h5>
+            </div>
+            <div class="modal-body">
+                <div class="text-center mb-3">
+                    <i class="fas fa-exclamation-circle text-warning" style="font-size: 3rem;"></i>
+                </div>
+                <p class="text-center" id="budgetWarningMessage">
+                    Ngân sách đang vượt quá thu nhập của bạn. Bạn có chắc chắn muốn thiết lập mức ngân sách này không?
+                </p>
+                <div class="alert alert-info mb-0">
+                    <small>
+                        <strong>Ngân sách đặt:</strong> <span id="warningBudgetAmount"></span><br>
+                        <strong>Tổng thu nhập hiện tại:</strong> <span id="warningIncomeAmount"></span>
+                    </small>
+                </div>
+            </div>
+            <div class="modal-footer justify-content-center">
+                <button type="button" class="btn btn-secondary" id="btnCancelBudget">
+                    <i class="fas fa-times"></i> Hủy
+                </button>
+                <button type="button" class="btn btn-warning" id="btnConfirmBudget">
+                    <i class="fas fa-check"></i> Tiếp tục
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
 <script>
 function changeBudgetPeriod() {
     const month = document.getElementById('budgetMonth').value;
     const year = document.getElementById('budgetYear').value;
     window.location.href = '?month=' + month + '&year=' + year;
 }
+
+// Budget warning modal logic
+document.addEventListener('DOMContentLoaded', function() {
+    // Hide warning alerts when user edits the budget amount
+    const budgetAmountInput = document.getElementById('budgetAmount');
+    if (budgetAmountInput) {
+        budgetAmountInput.addEventListener('input', function() {
+            const limitWarning = document.getElementById('budgetLimitWarning');
+            const expensesWarning = document.getElementById('budgetExpensesWarning');
+            if (limitWarning) {
+                limitWarning.style.display = 'none';
+            }
+            if (expensesWarning) {
+                expensesWarning.style.display = 'none';
+            }
+        });
+    }
+
+    <?php if ($show_budget_warning): ?>
+    // Server detected budget > income, show warning modal
+    const warningModal = new bootstrap.Modal(document.getElementById('budgetWarningModal'));
+    document.getElementById('warningBudgetAmount').textContent = '<?php echo formatCurrency($warning_amount); ?>';
+    document.getElementById('warningIncomeAmount').textContent = '<?php echo formatCurrency($warning_income); ?>';
+    warningModal.show();
+
+    // "Tiếp tục" - set confirm flag and resubmit
+    document.getElementById('btnConfirmBudget').addEventListener('click', function() {
+        document.getElementById('confirmOverride').value = '1';
+        
+        // main.js creates a hidden input with name="amount" and removes name from visible input.
+        // We need to ensure the hidden input has the correct raw value.
+        var budgetForm = document.getElementById('budgetForm');
+        var hiddenAmountInput = budgetForm.querySelector('input[type="hidden"][name="amount"]');
+        if (hiddenAmountInput) {
+            hiddenAmountInput.value = '<?php echo (int)$warning_amount; ?>';
+        } else {
+            // Fallback: if hidden input doesn't exist, restore name on visible input
+            var visibleInput = document.getElementById('budgetAmount');
+            if (visibleInput && !visibleInput.name) {
+                visibleInput.name = 'amount';
+            }
+            visibleInput.value = '<?php echo (int)$warning_amount; ?>';
+        }
+        
+        budgetForm.submit();
+    });
+
+    // "Hủy" - close modal, let user edit the amount
+    document.getElementById('btnCancelBudget').addEventListener('click', function() {
+        warningModal.hide();
+    });
+    <?php endif; ?>
+});
 </script>
 
 <?php include 'views/footer.php'; ?>

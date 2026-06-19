@@ -170,7 +170,7 @@ $page_title = 'Login - ' . APP_NAME;
                                 </button>
                             </form>
                             <p class="text-center text-muted mt-3 small">
-                                Demo: ngongoc@gmail.com / 123456
+                                Demo: demo123@gmail.com / 123456
                             </p>
                         </div>
 

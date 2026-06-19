@@ -24,7 +24,7 @@ SET FOREIGN_KEY_CHECKS = 1;
 -- Hash: $2y$10$Vs1FCW/OyPSYHPty0VrbUewqV3Rz./V1kZLJ4QHFl6dyAvo/qq7dC
 
 INSERT INTO users (id, username, full_name, email, password) VALUES
-(1, 'ngongoc', 'Ngô Thị Ngọc', 'ngongoc@gmail.com', '$2y$10$Vs1FCW/OyPSYHPty0VrbUewqV3Rz./V1kZLJ4QHFl6dyAvo/qq7dC'),
+(1, 'ngongoc', 'Ngô Thị Ngọc', 'demo123@gmail.com', '$2y$10$Vs1FCW/OyPSYHPty0VrbUewqV3Rz./V1kZLJ4QHFl6dyAvo/qq7dC'),
 (2, 'hachi', 'Trần Hà Chi', 'tranhachi@gmail.com', '$2y$10$Vs1FCW/OyPSYHPty0VrbUewqV3Rz./V1kZLJ4QHFl6dyAvo/qq7dC'),
 (3, 'thanhhai', 'Nguyễn Thanh Hải', 'nguyenthanhhai10@gmail.com', '$2y$10$Vs1FCW/OyPSYHPty0VrbUewqV3Rz./V1kZLJ4QHFl6dyAvo/qq7dC');
 

@@ -1,11 +1,15 @@
-const CACHE_NAME = 'chi-tieu-pwa-v2';
+const CACHE_NAME = 'chi-tieu-pwa-v3';
 const urlsToCache = [
   './',
   './index.php',
   './dashboard.php',
   './transactions.php',
   './add-transaction.php',
-  './wallets.php',
+  './categories.php',
+  './budget.php',
+  './statistics.php',
+  './profile.php',
+  './login.php',
   './manifest.json',
   './public/css/style.css',
   './public/js/main.js',
@@ -39,14 +43,14 @@ self.addEventListener('fetch', event => {
     fetch(event.request).then(networkResponse => {
       // If we get a successful response from network, update cache
       return caches.open(CACHE_NAME).then(cache => {
-        if (event.request.url.startsWith(self.location.origin)) {
+        if (event.request.url.startsWith(self.location.origin) && networkResponse.status === 200) {
           cache.put(event.request, networkResponse.clone());
         }
         return networkResponse;
       });
     }).catch(() => {
-      // If network fails, try to get it from cache
-      return caches.match(event.request).then(cachedResponse => {
+      // If network fails, try to get it from cache (ignoring search query parameters)
+      return caches.match(event.request, { ignoreSearch: true }).then(cachedResponse => {
         if (cachedResponse) {
           return cachedResponse;
         }

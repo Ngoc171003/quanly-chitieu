@@ -247,7 +247,7 @@ define('DB_NAME', 'chi_tieu_ca_nhan');
             <h5><span class="step-number">3</span>Tài Khoản Demo</h5>
             <p>Sau khi cài đặt, sử dụng tài khoản demo:</p>
             <div class="code-block">
-Email: ngongoc@gmail.com<br>
+Email: demo123@gmail.com<br>
 Mật khẩu: 123456
             </div>
         </div>

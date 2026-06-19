@@ -6,9 +6,16 @@ define('DB_PASS', '');
 define('DB_NAME', 'quanly_chitieu');
 define('DB_PORT', 3306);
 
-// Base URL - Tự phát hiện host để hỗ trợ truy cập từ điện thoại
+// Base URL - Tự phát hiện host và giao thức (HTTP/HTTPS) để hỗ trợ truy cập từ điện thoại và qua tunnel
 $host = $_SERVER['HTTP_HOST'] ?? 'localhost';
-define('BASE_URL', 'http://' . $host . '/Myproject/');
+$protocol = 'http://';
+if ((isset($_SERVER['HTTPS']) && ($_SERVER['HTTPS'] === 'on' || $_SERVER['HTTPS'] == 1)) || 
+    (isset($_SERVER['HTTP_X_FORWARDED_PROTO']) && $_SERVER['HTTP_X_FORWARDED_PROTO'] === 'https') ||
+    (isset($_SERVER['HTTP_X_FORWARDED_SSL']) && $_SERVER['HTTP_X_FORWARDED_SSL'] === 'on') ||
+    (isset($_SERVER['SERVER_PORT']) && $_SERVER['SERVER_PORT'] == 443)) {
+    $protocol = 'https://';
+}
+define('BASE_URL', $protocol . $host . '/Myproject/');
 
 // App Settings
 define('APP_NAME', 'Chi Tiêu');
