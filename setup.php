@@ -88,6 +88,7 @@
         </h1>
 
         <?php
+        require_once 'app/config.php';
         $setup_complete = false;
         $errors = [];
         $success_messages = [];
