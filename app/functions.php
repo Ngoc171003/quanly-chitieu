@@ -30,12 +30,6 @@ function formatDate($date, $format = null) {
     return date($format, strtotime($date));
 }
 
-/**
- * Get current user
- */
-function getCurrentUser() {
-    return isset($_SESSION['user']) ? $_SESSION['user'] : null;
-}
 
 /**
  * Check if user is authenticated
@@ -379,21 +373,6 @@ function getUserCategories($user_id, $db, $type = null) {
     }
 }
 
-/**
- * Get budget info
- */
-function getBudgetInfo($user_id, $db, $month = null, $year = null) {
-    if (!$month) $month = date('m');
-    if (!$year) $year = date('Y');
-    
-    $month = intval($month);
-    $year = intval($year);
-    
-    $query = "SELECT id, limit_amount FROM budgets WHERE user_id = ? AND month = ? AND year = ?";
-    $result = $db->execute($query, [$user_id, $month, $year]);
-    
-    return $result && $result->num_rows > 0 ? $result->fetch_assoc() : null;
-}
 
 /**
  * Generate CSRF token if it does not exist, and return it
