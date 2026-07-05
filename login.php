@@ -97,6 +97,11 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                     foreach ($categories as $cat) {
                         $db->execute($cat_query, [$user_id, $cat[0], $cat[1]]);
                     }
+
+                    // Create default wallet
+                    $wallet_query = "INSERT INTO wallets (user_id, name, type, initial_balance, icon, is_default) 
+                                     VALUES (?, 'Ví Tiền Mặt', 'cash', 0.00, 'fas fa-wallet', 1)";
+                    $db->execute($wallet_query, [$user_id]);
                     
                     $success = 'Đăng ký thành công! Vui lòng đăng nhập.';
                     // Clear form

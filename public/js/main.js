@@ -246,8 +246,98 @@ function isValidAmount(amount) {
     return !isNaN(amount) && parseFloat(amount) > 0;
 }
 
+function openAiAdvisorModal() {
+    var modalHtml = `
+    <div class="modal fade" id="aiAdvisorModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-xl modal-dialog-centered">
+            <div class="modal-content border-0 shadow-lg">
+                <div class="modal-header">
+                    <h5 class="modal-title"><i class="fas fa-robot me-2"></i> AI Financial Advisor</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div id="aiAdvisorLoading" class="d-flex align-items-center gap-3">
+                        <div class="spinner-border text-primary" role="status"></div>
+                        <div>Đang phân tích dữ liệu tài chính của bạn...</div>
+                    </div>
+                    <div id="aiAdvisorContent" class="d-none">
+                        <div class="mb-3"><strong>Kết quả tư vấn:</strong></div>
+                        <div id="aiAdvisorText" class="text-muted" style="white-space: pre-line;"></div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Đóng</button>
+                </div>
+            </div>
+        </div>
+    </div>`;
+
+    if (!document.getElementById('aiAdvisorModal')) {
+        var wrapper = document.createElement('div');
+        wrapper.innerHTML = modalHtml;
+        document.body.appendChild(wrapper);
+    }
+
+    var modalElement = document.getElementById('aiAdvisorModal');
+    var modal = new bootstrap.Modal(modalElement);
+    modal.show();
+
+    var monthSelect = document.getElementById('monthSelect');
+    var yearSelect = document.getElementById('yearSelect');
+    var payload = {
+        month: monthSelect ? monthSelect.value : null,
+        year: yearSelect ? yearSelect.value : null
+    };
+
+    fetch('api/ai_analysis.php', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(payload)
+    })
+    .then(function(response) {
+        return response.json();
+    })
+    .then(function(data) {
+        var loading = document.getElementById('aiAdvisorLoading');
+        var content = document.getElementById('aiAdvisorContent');
+        var text = document.getElementById('aiAdvisorText');
+        if (data && data.success) {
+            loading.classList.add('d-none');
+            text.innerHTML = formatAiAdviceText(data.advice);
+            content.classList.remove('d-none');
+        } else {
+            loading.classList.add('d-none');
+            text.innerHTML = formatAiAdviceText(data.error || 'Không thể lấy tư vấn AI. Vui lòng thử lại sau.');
+            content.classList.remove('d-none');
+        }
+    })
+    .catch(function() {
+        var loading = document.getElementById('aiAdvisorLoading');
+        var content = document.getElementById('aiAdvisorContent');
+        var text = document.getElementById('aiAdvisorText');
+        loading.classList.add('d-none');
+        text.innerHTML = formatAiAdviceText('Không thể kết nối với máy chủ để lấy tư vấn AI. Vui lòng kiểm tra kết nối và thử lại.');
+        content.classList.remove('d-none');
+    });
+}
+
+function formatAiAdviceText(advice) {
+    if (!advice) return '';
+    var cleaned = advice.replace(/\r\n/g, '\n').trim();
+    var parts = cleaned.split(/\n|\d+\)\s*/g)
+        .map(function(item) { return item.trim(); })
+        .filter(function(item) { return item.length > 0; });
+
+    return parts.map(function(item) {
+        return '<div class="ai-advice-line mb-2"><i class="fas fa-angle-right text-primary me-2"></i>' + item + '</div>';
+    }).join('');
+}
+
 // Export functions for use in global scope
 window.formatCurrency = formatCurrency;
+window.openAiAdvisorModal = openAiAdvisorModal;
 window.formatDate = formatDate;
 window.showLoading = showLoading;
 window.showSuccess = showSuccess;

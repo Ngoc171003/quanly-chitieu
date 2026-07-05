@@ -19,7 +19,7 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     
     <!-- Custom CSS -->
-    <link rel="stylesheet" href="<?php echo BASE_URL; ?>public/css/style.css?v=1.3">
+    <link rel="stylesheet" href="<?php echo BASE_URL; ?>public/css/style.css?v=1.5">
 </head>
 <body>
     <?php if (isAuthenticated()): 
@@ -43,6 +43,11 @@
                         </a>
                     </li>
                     <li class="nav-item">
+                        <a class="nav-link" href="<?php echo BASE_URL; ?>wallets.php">
+                            <i class="fas fa-wallet"></i> Ví của tôi
+                        </a>
+                    </li>
+                    <li class="nav-item">
                         <a class="nav-link" href="<?php echo BASE_URL; ?>transactions.php">
                             <i class="fas fa-exchange-alt"></i> Giao dịch
                         </a>
@@ -55,6 +60,11 @@
                     <li class="nav-item">
                         <a class="nav-link" href="<?php echo BASE_URL; ?>budget.php">
                             <i class="fas fa-chart-pie"></i> Ngân sách
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="<?php echo BASE_URL; ?>savings.php">
+                            <i class="fas fa-bullseye"></i> Mục tiêu tiết kiệm
                         </a>
                     </li>
                     <li class="nav-item">

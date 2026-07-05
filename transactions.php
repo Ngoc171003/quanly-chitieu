@@ -8,6 +8,7 @@ requireAuth($db);
 $user_id = $_SESSION['user_id'];
 $filter_type = $_GET['type'] ?? '';
 $filter_category = $_GET['category'] ?? '';
+$filter_wallet = $_GET['wallet'] ?? '';
 $filter_date_from = $_GET['date_from'] ?? '';
 $filter_date_to = $_GET['date_to'] ?? '';
 
@@ -17,15 +18,23 @@ if (isset($_GET['action']) && $_GET['action'] == 'delete' && isset($_GET['id']))
         header('Location: ' . BASE_URL . 'transactions.php?error=csrf');
         exit;
     } else {
-        $trans_id = intval($_GET['id']);
-        $check = "SELECT t.id, t.amount, c.type FROM transactions t
+    $trans_id = intval($_GET['id']);
+        $check = "SELECT t.id, t.amount, t.savings_goal_id, c.type FROM transactions t
                   JOIN categories c ON t.category_id = c.id
                   WHERE t.id = ? AND t.user_id = ?";
         $check_result = $db->execute($check, [$trans_id, $user_id]);
         if ($check_result && $check_result->num_rows > 0) {
             $data = $check_result->fetch_assoc();
+            $linked_goal_id = intval($data['savings_goal_id'] ?? 0);
+
             $delete_query = "DELETE FROM transactions WHERE id = ? AND user_id = ?";
             $db->execute($delete_query, [$trans_id, $user_id]);
+
+            // If this transaction was a savings contribution, recalculate the goal's amount
+            if ($linked_goal_id > 0) {
+                recalculateSavingsGoalAmount($linked_goal_id, $user_id, $db);
+            }
+
             header('Location: ' . BASE_URL . 'transactions.php?deleted=1');
             exit;
         }
@@ -36,6 +45,7 @@ if (isset($_GET['action']) && $_GET['action'] == 'delete' && isset($_GET['id']))
 $filters = [
     'type' => !empty($filter_type) ? strtolower($filter_type) : '',
     'category_id' => !empty($filter_category) ? intval($filter_category) : '',
+    'wallet_id' => !empty($filter_wallet) ? intval($filter_wallet) : '',
     'date_from' => !empty($filter_date_from) ? $filter_date_from : '',
     'date_to' => !empty($filter_date_to) ? $filter_date_to : '',
     'sort' => $_GET['sort'] ?? 'desc'
@@ -46,6 +56,9 @@ $transactions = getTransactions($user_id, $db, $filters);
 
 // Get categories for filter dropdown
 $categories = getUserCategories($user_id, $db);
+
+// Get wallets for filter dropdown
+$wallets_list = getUserWallets($user_id, $db);
 
 $page_title = 'Giao Dịch - ' . APP_NAME;
 ?>
@@ -66,6 +79,17 @@ $page_title = 'Giao Dịch - ' . APP_NAME;
                             <option value="">Tất Cả</option>
                     <option value="thu" <?php echo strtolower($filter_type) == 'thu' ? 'selected' : ''; ?>>Thu</option>
                     <option value="chi" <?php echo strtolower($filter_type) == 'chi' ? 'selected' : ''; ?>>Chi</option>
+                </select>
+            </div>
+            <div class="col-lg-2 col-md-4">
+                <label class="form-label">Ví / Tài Khoản</label>
+                <select name="wallet" class="form-select">
+                    <option value="">Tất Cả</option>
+                    <?php foreach ($wallets_list as $w): ?>
+                    <option value="<?php echo $w['id']; ?>" <?php echo $filter_wallet == $w['id'] ? 'selected' : ''; ?>>
+                        <?php echo e($w['name']); ?>
+                    </option>
+                    <?php endforeach; ?>
                 </select>
             </div>
             <div class="col-lg-2 col-md-4">
@@ -135,6 +159,7 @@ $page_title = 'Giao Dịch - ' . APP_NAME;
                 <thead class="table-light">
                     <tr>
                         <th>Ngày</th>
+                        <th>Ví</th>
                         <th>Danh Mục</th>
                         <th>Ghi Chú</th>
                         <th class="text-end">Số Tiền</th>
@@ -144,7 +169,7 @@ $page_title = 'Giao Dịch - ' . APP_NAME;
                 <tbody>
                     <?php if ($transactions->num_rows == 0): ?>
                     <tr>
-                        <td colspan="5" class="text-center py-4 text-muted">
+                        <td colspan="6" class="text-center py-4 text-muted">
                             <i class="fas fa-inbox" style="font-size: 2rem;"></i>
                             <p class="mt-2">Không có giao dịch nào</p>
                         </td>
@@ -153,6 +178,12 @@ $page_title = 'Giao Dịch - ' . APP_NAME;
                         <?php while ($trans = $transactions->fetch_assoc()): ?>
                         <tr>
                             <td><strong><?php echo formatDate($trans['transaction_date']); ?></strong></td>
+                            <td>
+                                <span class="badge bg-light text-dark border">
+                                    <i class="<?php echo e($trans['wallet_icon'] ?? 'fas fa-wallet'); ?> text-primary me-1"></i>
+                                    <?php echo e($trans['wallet_name'] ?? 'Chưa rõ'); ?>
+                                </span>
+                            </td>
                             <td>
                                 <span class="badge <?php echo strtolower($trans['category_type']) == 'thu' ? 'bg-success' : 'bg-danger'; ?>">
                                     <?php echo e($trans['category_name']); ?>

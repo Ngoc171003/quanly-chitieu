@@ -14,7 +14,7 @@
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     
     <!-- Custom JS -->
-    <script src="<?php echo BASE_URL; ?>public/js/main.js?v=1.2"></script>
+    <script src="<?php echo BASE_URL; ?>public/js/main.js?v=1.3"></script>
     <script>
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', function() {

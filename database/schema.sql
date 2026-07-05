@@ -18,6 +18,25 @@ CREATE TABLE users (
     INDEX idx_username (username)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
+-- WALLETS
+CREATE TABLE wallets (
+    id INT PRIMARY KEY AUTO_INCREMENT,
+    user_id INT NOT NULL,
+    name VARCHAR(100) NOT NULL,
+    type ENUM('cash', 'bank', 'ewallet') NOT NULL DEFAULT 'cash',
+    initial_balance DECIMAL(15,2) DEFAULT 0.00,
+    icon VARCHAR(50) DEFAULT NULL,
+    is_default TINYINT(1) DEFAULT 0,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    
+    CONSTRAINT fk_wallet_user
+        FOREIGN KEY (user_id)
+        REFERENCES users(id)
+        ON DELETE CASCADE,
+        
+    INDEX idx_wallet_user (user_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
 -- CATEGORIES
 CREATE TABLE categories (
     id INT PRIMARY KEY AUTO_INCREMENT,
@@ -40,6 +59,7 @@ CREATE TABLE transactions (
     id INT PRIMARY KEY AUTO_INCREMENT,
     user_id INT NOT NULL,
     category_id INT NOT NULL,
+    wallet_id INT NOT NULL,
     amount DECIMAL(15,2) NOT NULL,
     transaction_date DATE NOT NULL,
     note TEXT,
@@ -56,9 +76,15 @@ CREATE TABLE transactions (
         REFERENCES categories(id)
         ON DELETE CASCADE,
 
+    CONSTRAINT fk_transaction_wallet
+        FOREIGN KEY (wallet_id)
+        REFERENCES wallets(id)
+        ON DELETE CASCADE,
+
     INDEX idx_user_date (user_id, transaction_date),
     INDEX idx_user_category (user_id, category_id),
-    INDEX idx_transaction_date (transaction_date)
+    INDEX idx_transaction_date (transaction_date),
+    INDEX idx_transaction_wallet (wallet_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- BUDGETS
@@ -80,6 +106,27 @@ CREATE TABLE budgets (
 
     INDEX idx_user_month_year (user_id, year, month)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- SAVINGS GOALS
+CREATE TABLE savings_goals (
+    id INT PRIMARY KEY AUTO_INCREMENT,
+    user_id INT NOT NULL,
+    name VARCHAR(100) NOT NULL,
+    target_amount DECIMAL(15,2) NOT NULL,
+    current_amount DECIMAL(15,2) DEFAULT 0.00,
+    target_date DATE NOT NULL,
+    status ENUM('active', 'completed') DEFAULT 'active',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    
+    CONSTRAINT fk_savings_goal_user
+        FOREIGN KEY (user_id)
+        REFERENCES users(id)
+        ON DELETE CASCADE,
+        
+    INDEX idx_savings_goal_user (user_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
 
 -- Default categories - these should be added when user registers
 -- INSERT INTO categories (user_id, name, type) VALUES

@@ -97,7 +97,7 @@ $page_title = 'Thống Kê - ' . APP_NAME;
         <div class="card border-0 shadow-sm h-100 stat-card stat-card--income">
             <div class="card-body d-flex align-items-center gap-3">
                 <div class="stat-icon stat-icon--income">
-                    <i class="fas fa-arrow-down"></i>
+                    <i class="fa-solid fa-circle-arrow-up"></i>
                 </div>
                 <div>
                     <p class="text-muted mb-1 small">Tổng Thu</p>
@@ -111,7 +111,7 @@ $page_title = 'Thống Kê - ' . APP_NAME;
         <div class="card border-0 shadow-sm h-100 stat-card stat-card--expense">
             <div class="card-body d-flex align-items-center gap-3">
                 <div class="stat-icon stat-icon--expense">
-                    <i class="fas fa-arrow-up"></i>
+                    <i class="fa-solid fa-circle-arrow-down"></i>
                 </div>
                 <div>
                     <p class="text-muted mb-1 small">Tổng Chi</p>
@@ -125,10 +125,10 @@ $page_title = 'Thống Kê - ' . APP_NAME;
         <div class="card border-0 shadow-sm h-100 stat-card stat-card--balance">
             <div class="card-body d-flex align-items-center gap-3">
                 <div class="stat-icon stat-icon--balance">
-                    <i class="fas fa-balance-scale"></i>
+                    <i class="fa-solid fa-scale-balanced"></i>
                 </div>
                 <div>
-                    <p class="text-muted mb-1 small">Chênh Lệch</p>
+                    <p class="text-muted mb-1 small">Số dư hiện tại</p>
                     <h5 class="mb-0 fw-bold <?php echo ($total_thu - $total_chi) >= 0 ? 'text-success' : 'text-danger'; ?>">
                         <?php echo formatCurrency($total_thu - $total_chi); ?>
                     </h5>

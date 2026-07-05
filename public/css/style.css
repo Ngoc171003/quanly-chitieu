@@ -519,7 +519,208 @@ footer {
 
 .list-unstyled li a:hover {
     color: var(--primary-color);
-    padding-left: 0.35rem;
+}
+
+/* Dashboard custom widgets */
+.dashboard-filters .form-select,
+.dashboard-filters .btn {
+    min-height: 54px;
+}
+
+.metric-card {
+    transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+    border-radius: 12px;
+}
+
+.metric-assets { background: linear-gradient(135deg, rgba(79, 139, 255, 0.08) 0%, rgba(255, 255, 255, 1) 100%); border-bottom: 3px solid rgba(79, 139, 255, 0.5); }
+.metric-income { background: linear-gradient(135deg, rgba(69, 196, 159, 0.1) 0%, rgba(255, 255, 255, 1) 100%); border-bottom: 3px solid rgba(69, 196, 159, 0.5); }
+.metric-expense { background: linear-gradient(135deg, rgba(255, 107, 107, 0.08) 0%, rgba(255, 255, 255, 1) 100%); border-bottom: 3px solid rgba(255, 107, 107, 0.5); }
+.metric-balance { background: linear-gradient(135deg, rgba(125, 199, 255, 0.1) 0%, rgba(255, 255, 255, 1) 100%); border-bottom: 3px solid rgba(125, 199, 255, 0.5); }
+
+.metric-card:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.08) !important;
+}
+
+/* Animations for table and list items */
+.table-hover tbody tr {
+    transition: background-color 0.25s ease, transform 0.2s ease;
+}
+.table-hover tbody tr:hover {
+    background-color: rgba(79, 139, 255, 0.04) !important;
+    transform: translateX(4px);
+}
+
+.spending-item {
+    transition: background-color 0.2s ease, transform 0.2s ease, border-radius 0.2s;
+}
+.spending-item:hover {
+    background-color: rgba(255, 107, 107, 0.04) !important;
+    transform: translateX(4px);
+    border-radius: 8px;
+}
+
+.card-label {
+    font-size: 0.82rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--muted-color);
+    margin-bottom: 0.35rem;
+}
+
+.metric-icon {
+    width: 52px;
+    height: 52px;
+    min-width: 52px;
+    min-height: 52px;
+    flex-shrink: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 12px;
+    background-color: transparent !important;
+    border: none;
+    color: inherit;
+    box-shadow: 0 4px 12px rgba(79, 139, 255, 0.15);
+    transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.metric-card:hover .metric-icon {
+    transform: scale(1.1) rotate(5deg);
+}
+
+.metric-icon i {
+    font-size: 1.5rem;
+}
+
+.metric-icon.bg-primary,
+.metric-icon.bg-success,
+.metric-icon.bg-danger,
+.metric-icon.bg-info {
+    border-color: transparent !important;
+}
+
+.metric-icon.bg-primary { background-color: rgba(79, 139, 255, 0.85) !important; }
+.metric-icon.bg-success { background-color: rgba(69, 196, 159, 0.85) !important; }
+.metric-icon.bg-danger { background-color: rgba(255, 107, 107, 0.85) !important; }
+.metric-icon.bg-info { background-color: rgba(125, 199, 255, 0.85) !important; }
+
+.metric-trend {
+    font-size: 0.88rem;
+    font-weight: 500;
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    line-height: 1.3;
+}
+
+.metric-trend i {
+    font-size: 0.95rem;
+    flex-shrink: 0;
+}
+
+.metric-trend span {
+    display: block;
+}
+
+.chart-summary .summary-value {
+    font-size: 1rem;
+    font-weight: 700;
+}
+
+.category-list {
+    margin-top: 1.2rem;
+    display: grid;
+    gap: 0.7rem;
+}
+
+.category-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.9rem 1rem;
+    background: rgba(79, 139, 255, 0.06);
+    border-radius: 16px;
+}
+
+.category-label {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    color: var(--text-color);
+}
+
+.category-dot {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    display: inline-block;
+}
+
+.budget-card .budget-summary {
+    gap: 0.5rem;
+    display: grid;
+    margin-bottom: 1rem;
+}
+
+.overview-card .overview-list {
+    display: grid;
+    gap: 0.85rem;
+}
+
+.overview-item {
+    padding: 0.95rem 1rem;
+    border-radius: 16px;
+    background: rgba(79, 139, 255, 0.06);
+    color: var(--text-color);
+    font-weight: 600;
+}
+
+.ai-advisor-card {
+    background: linear-gradient(135deg, rgba(125, 199, 255, 0.12), rgba(255, 255, 255, 0.96));
+}
+
+.ai-metric-item {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    margin-bottom: 0.9rem;
+    color: var(--text-color);
+}
+
+.progress-slim {
+    height: 10px;
+    border-radius: 12px;
+    background-color: rgba(223, 229, 247, 0.9);
+}
+
+.progress-slim .progress-bar {
+    border-radius: 12px;
+}
+
+.transaction-item,
+.spending-item {
+    transition: background-color 0.2s ease, transform 0.2s ease;
+}
+
+.transaction-item:hover,
+.spending-item:hover {
+    background: rgba(79, 139, 255, 0.08);
+    transform: translateY(-1px);
+}
+
+.transaction-icon .badge {
+    width: 48px;
+    height: 48px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
+@media (max-width: 991px) {
+    .dashboard-filters { flex-wrap: wrap; }
+    .dashboard-filters .form-select,
+    .dashboard-filters .btn { width: 100%; }
 }
 
 .list-unstyled li a:hover {
@@ -534,7 +735,7 @@ footer {
 }
 
 .breadcrumb-item.active {
-    color: var(--dark-color);
+    color: var(--text-color);
     font-weight: 500;
 }
 
@@ -703,6 +904,25 @@ canvas {
     border-bottom: none !important;
 }
 
+.ai-advisor-card {
+    border: 1px solid rgba(79, 139, 255, 0.18) !important;
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.98) 0%, rgba(245, 251, 255, 0.9) 100%);
+}
+
+.ai-advisor-card .badge {
+    font-size: 0.8rem;
+    letter-spacing: 0.08em;
+}
+
+.ai-advisor-card h5 {
+    font-size: 1.3rem;
+    margin-bottom: 0.5rem;
+}
+
+.ai-advisor-card p {
+    max-width: 680px;
+}
+
 /* Footer improvements */
 .footer-minimal {
     padding: 1rem;
@@ -768,7 +988,7 @@ canvas {
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: 1.1rem;
+    font-size: 1.4rem;
     flex-shrink: 0;
 }
 
@@ -790,6 +1010,153 @@ canvas {
 .stat-icon--count {
     background: rgba(255, 178, 107, 0.12);
     color: var(--warning-color);
+}
+
+/* AI Advisor Card */
+.ai-advisor-card {
+    background: linear-gradient(135deg, rgba(79, 139, 255, 0.08) 0%, rgba(255, 215, 0, 0.04) 100%);
+    border: 1px solid rgba(79, 139, 255, 0.15) !important;
+}
+
+.ai-advisor-card .badge {
+    font-size: 0.75rem;
+    letter-spacing: 0.08em;
+    padding: 0.5rem 0.75rem !important;
+}
+
+.ai-advisor-card .btn-sm {
+    padding: 0.25rem 0.5rem;
+    font-size: 0.85rem;
+}
+
+.ai-score {
+    background: rgba(79, 139, 255, 0.05);
+    padding: 1rem;
+    border-radius: 12px;
+}
+
+.ai-status {
+    display: inline-block;
+    font-size: 0.85rem;
+    font-weight: 600;
+    padding: 0.5rem 0.75rem;
+    border-radius: 20px;
+}
+
+.ai-analysis {
+    background: rgba(245, 251, 255, 0.8);
+    padding: 0.75rem;
+    border-left: 3px solid var(--primary-color);
+    border-radius: 8px;
+}
+
+.ai-analysis p {
+    color: var(--text-color);
+    line-height: 1.5;
+}
+
+.ai-suggestions ul li {
+    padding: 0.5rem 0;
+    border-bottom: 1px solid rgba(223, 229, 247, 0.5);
+}
+
+.ai-suggestions ul li:last-child {
+    border-bottom: none;
+}
+
+.ai-suggestions small {
+    color: var(--text-color);
+    line-height: 1.5;
+}
+
+.ai-detail-full {
+    font-size: 0.95rem;
+}
+
+.ai-detail-full h6 {
+    font-weight: 700;
+    color: var(--text-color);
+    margin-bottom: 1rem;
+    padding-bottom: 0.5rem;
+    border-bottom: 2px solid rgba(79, 139, 255, 0.2);
+}
+
+.ai-detail-full .list-group-item {
+    border: none;
+    border-bottom: 1px solid rgba(223, 229, 247, 0.5);
+    padding: 0.75rem 0;
+    background: transparent;
+}
+
+.ai-detail-full .list-group-item:last-child {
+    border-bottom: none;
+}
+
+.ai-detail-full p {
+    color: var(--text-color);
+    line-height: 1.6;
+}
+
+/* Spinner styling */
+.spinner-border-sm {
+    width: 1.5rem;
+    height: 1.5rem;
+    border-width: 0.2em;
+}
+
+/* Dashboard Recent Transactions Table */
+.card .table {
+    border-collapse: collapse;
+    border-spacing: 0;
+}
+
+.card .table thead {
+    background-color: rgba(79, 139, 255, 0.05);
+    border-top: 1px solid rgba(223, 229, 247, 0.6);
+    border-bottom: 1px solid rgba(223, 229, 247, 0.6);
+}
+
+.card .table thead th {
+    color: var(--text-color);
+    font-weight: 700;
+    font-size: 0.9rem;
+    padding: 1rem 1rem;
+    border: none;
+    background-color: transparent;
+    letter-spacing: 0.02em;
+}
+
+.card .table tbody tr {
+    background: var(--surface-strong);
+    border: 1px solid rgba(223, 229, 247, 0.5);
+    border-radius: 0;
+    transition: all 0.2s ease;
+}
+
+.card .table tbody tr:hover {
+    background-color: rgba(79, 139, 255, 0.02);
+    transform: none;
+    box-shadow: none;
+}
+
+.card .table tbody td {
+    padding: 0.9rem 1rem;
+    vertical-align: middle;
+    border: none;
+    font-size: 0.95rem;
+}
+
+.card .table tbody tr:first-child td {
+    border-top: 1px solid rgba(223, 229, 247, 0.5);
+}
+
+.card .table tbody td small {
+    display: block;
+}
+
+.card .table tbody td .badge {
+    font-size: 0.8rem;
+    padding: 0.4rem 0.7rem;
 }
 
 /* Stats Tab Bar */

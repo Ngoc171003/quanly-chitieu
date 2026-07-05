@@ -51,6 +51,12 @@ define('APP_NAME', 'Chi Tiêu');
 define('DATE_FORMAT', 'd/m/Y');
 define('CURRENCY', 'VNĐ');
 
+// AI Advisor Settings
+define('AI_API_KEY', getenv('AI_API_KEY') ?: getenv('GEMINI_API_KEY') ?: '');
+define('AI_API_MODEL', getenv('AI_API_MODEL') ?: getenv('GEMINI_MODEL') ?: 'gpt-4.1-mini');
+define('AI_API_URL', getenv('AI_API_URL') ?: getenv('GEMINI_API_URL') ?: 'https://api.openai.com/v1/chat/completions');
+define('AI_ADVISOR_ENABLED', true);
+
 // Session
 ini_set('session.cookie_lifetime', 86400 * 30); // 30 days
 session_start();
