@@ -878,10 +878,10 @@ function getStatusColor(status) {
 
 function openAiDetailModal() {
     if (!currentAdvice) return;
-    
+
     const detailContent = document.getElementById('aiDetailContent');
     const statusColor = getStatusColor(currentAdvice.status);
-    
+
     let html = `
     <div class="ai-detail-full">
         <!-- Overview Card -->
@@ -1053,6 +1053,7 @@ function openAiDetailModal() {
                     </div>
                 </div>
             </div>
+
         </div>
     </div>
     `;

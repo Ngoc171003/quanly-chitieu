@@ -328,72 +328,433 @@ function getMonthlyExpenseComparison($user_id, $db, $month = null, $year = null)
 }
 
 /**
- * Generate a prompt for the AI advisor
+ * Savings rate (%) = (income - expenses) / income * 100
  */
-function buildAiAdvisorPrompt($dashboard, $category_stats, $expense_trend, $comparison, $month, $year) {
+function calculateSavingsRate($income, $expenses) {
+    $income = floatval($income);
+    $expenses = floatval($expenses);
+    if ($income <= 0) {
+        return 0.0;
+    }
+    return round((($income - $expenses) / $income) * 100, 1);
+}
+
+/**
+ * Analyze the multi-month expense trend from getRecentExpenseSummary() data.
+ * Looks at direction (rising/falling/stable) and momentum (consecutive months moving
+ * the same way), not just a single month-over-month delta.
+ */
+function analyzeSpendingTrend($expense_trend) {
+    $totals = $expense_trend['totals'] ?? [];
+    $count = count($totals);
+
+    $unknown = [
+        'direction' => 'unknown',
+        'current' => $count > 0 ? floatval(end($totals)) : 0,
+        'average_previous' => 0,
+        'change_percent' => 0,
+        'consecutive_increase_months' => 0,
+        'consecutive_decrease_months' => 0,
+        'note' => 'Chưa đủ dữ liệu lịch sử (cần ít nhất 2 tháng có giao dịch) để phân tích xu hướng chi tiêu.'
+    ];
+
+    if ($count < 2) {
+        return $unknown;
+    }
+
+    $current = floatval($totals[$count - 1]);
+    $previous_values = array_slice($totals, 0, $count - 1);
+    $nonzero_previous = array_filter($previous_values, function ($v) { return $v > 0; });
+
+    if (count($nonzero_previous) < 2) {
+        return $unknown;
+    }
+
+    $average_previous = array_sum($previous_values) / count($previous_values);
+    $change_percent = 0;
+    if ($average_previous > 0) {
+        $change_percent = round((($current - $average_previous) / $average_previous) * 100, 1);
+    } elseif ($current > 0) {
+        $change_percent = 100.0;
+    }
+
+    $consecutive_increase = 0;
+    for ($i = $count - 1; $i > 0; $i--) {
+        if ($totals[$i] > $totals[$i - 1]) { $consecutive_increase++; } else { break; }
+    }
+    $consecutive_decrease = 0;
+    for ($i = $count - 1; $i > 0; $i--) {
+        if ($totals[$i] < $totals[$i - 1]) { $consecutive_decrease++; } else { break; }
+    }
+
+    if ($consecutive_increase >= 2) {
+        $direction = 'rising';
+    } elseif ($consecutive_decrease >= 2) {
+        $direction = 'falling';
+    } elseif (abs($change_percent) <= 8) {
+        $direction = 'stable';
+    } else {
+        $direction = $change_percent > 0 ? 'rising' : 'falling';
+    }
+
+    $historyMonths = count($previous_values);
+    if ($direction === 'rising' && $consecutive_increase >= 2) {
+        $note = "Chi tiêu tăng liên tục " . ($consecutive_increase + 1) . " tháng gần đây, hiện cao hơn " . abs($change_percent) . "% so với trung bình {$historyMonths} tháng trước.";
+    } elseif ($direction === 'falling' && $consecutive_decrease >= 2) {
+        $note = "Chi tiêu giảm liên tục " . ($consecutive_decrease + 1) . " tháng gần đây, hiện thấp hơn " . abs($change_percent) . "% so với trung bình {$historyMonths} tháng trước.";
+    } elseif ($direction === 'stable') {
+        $note = "Chi tiêu tương đối ổn định so với trung bình {$historyMonths} tháng gần đây (chênh lệch " . ($change_percent >= 0 ? '+' : '') . "{$change_percent}%).";
+    } else {
+        $note = "Chi tiêu tháng này " . ($change_percent >= 0 ? 'cao hơn' : 'thấp hơn') . " " . abs($change_percent) . "% so với trung bình {$historyMonths} tháng trước.";
+    }
+
+    return [
+        'direction' => $direction,
+        'current' => $current,
+        'average_previous' => round($average_previous),
+        'change_percent' => $change_percent,
+        'consecutive_increase_months' => $consecutive_increase,
+        'consecutive_decrease_months' => $consecutive_decrease,
+        'note' => $note
+    ];
+}
+
+/**
+ * Compare this month's per-category expense against last month's to find risers/fallers.
+ * Reuses getCategoryStats() for both months instead of a new query.
+ */
+function analyzeCategoryTrend($user_id, $db, $month = null, $year = null) {
+    if (!$month) $month = date('m');
+    if (!$year) $year = date('Y');
+    $month = intval($month);
+    $year = intval($year);
+
+    try {
+        $current = new DateTimeImmutable(sprintf('%04d-%02d-01', $year, $month));
+    } catch (Exception $e) {
+        $current = new DateTimeImmutable('first day of this month');
+    }
+    $previous = $current->modify('-1 month');
+
+    $current_result = getCategoryStats($user_id, $db, 'Chi', (int)$current->format('m'), (int)$current->format('Y'));
+    $previous_result = getCategoryStats($user_id, $db, 'Chi', (int)$previous->format('m'), (int)$previous->format('Y'));
+
+    $previous_totals = [];
+    while ($row = $previous_result->fetch_assoc()) {
+        $previous_totals[$row['name']] = floatval($row['total']);
+    }
+
+    $trends = [];
+    while ($row = $current_result->fetch_assoc()) {
+        $name = $row['name'];
+        $curr_total = floatval($row['total']);
+        $prev_total = $previous_totals[$name] ?? 0;
+
+        $change_percent = 0;
+        if ($prev_total > 0) {
+            $change_percent = round((($curr_total - $prev_total) / $prev_total) * 100, 1);
+        } elseif ($curr_total > 0) {
+            $change_percent = 100.0;
+        }
+
+        $trends[] = [
+            'name' => $name,
+            'current' => $curr_total,
+            'previous' => $prev_total,
+            'change_percent' => $change_percent,
+            'direction' => $change_percent > 0 ? 'up' : ($change_percent < 0 ? 'down' : 'flat')
+        ];
+    }
+
+    usort($trends, function ($a, $b) {
+        return abs($b['change_percent']) <=> abs($a['change_percent']);
+    });
+
+    return $trends;
+}
+
+/**
+ * Format the biggest category risers (vs last month) into short strings for the UI's
+ * existing "rising_categories" badge list, e.g. "Giải trí tăng 32%".
+ */
+function formatRisingCategories($category_trends, $threshold_percent = 20, $limit = 3) {
+    $rising = [];
+    foreach ($category_trends as $t) {
+        if ($t['direction'] === 'up' && $t['previous'] > 0 && $t['change_percent'] >= $threshold_percent) {
+            $rising[] = $t['name'] . ' tăng ' . round($t['change_percent']) . '%';
+        }
+        if (count($rising) >= $limit) break;
+    }
+    return $rising;
+}
+
+/**
+ * Detect individual transactions in the given month that are statistical outliers relative
+ * to their own category's recent history (mean + 2*stddev over the preceding $lookback_months).
+ * Requires at least 3 historical samples in a category before judging it, to avoid false
+ * positives on sparse data.
+ */
+function detectAbnormalTransactions($user_id, $db, $month = null, $year = null, $lookback_months = 3) {
+    if (!$month) $month = date('m');
+    if (!$year) $year = date('Y');
+    $month = intval($month);
+    $year = intval($year);
+
+    $start_date = sprintf('%04d-%02d-01', $year, $month);
+    $end_date = date('Y-m-t', strtotime($start_date));
+    $baseline_end = date('Y-m-d', strtotime($start_date . ' -1 day'));
+    $baseline_start = date('Y-m-01', strtotime($start_date . ' -' . $lookback_months . ' months'));
+
+    $baseline_query = "SELECT c.id as category_id, c.name, t.amount
+                        FROM transactions t
+                        JOIN categories c ON t.category_id = c.id
+                        WHERE t.user_id = ? AND LOWER(c.type) = 'chi'
+                        AND t.transaction_date BETWEEN ? AND ?";
+    $baseline_result = $db->execute($baseline_query, [$user_id, $baseline_start, $baseline_end]);
+
+    $samples = [];
+    if ($baseline_result) {
+        while ($row = $baseline_result->fetch_assoc()) {
+            $cid = $row['category_id'];
+            $samples[$cid]['amounts'][] = floatval($row['amount']);
+        }
+    }
+
+    $current_query = "SELECT t.id, t.category_id, c.name as category_name, t.amount, t.transaction_date
+                       FROM transactions t
+                       JOIN categories c ON t.category_id = c.id
+                       WHERE t.user_id = ? AND LOWER(c.type) = 'chi'
+                       AND t.transaction_date BETWEEN ? AND ?";
+    $current_result = $db->execute($current_query, [$user_id, $start_date, $end_date]);
+
+    $flagged = [];
+    if ($current_result) {
+        while ($row = $current_result->fetch_assoc()) {
+            $cid = $row['category_id'];
+            $amount = floatval($row['amount']);
+            $history = $samples[$cid]['amounts'] ?? [];
+
+            if (count($history) < 3) {
+                continue;
+            }
+
+            $mean = array_sum($history) / count($history);
+            $variance = 0;
+            foreach ($history as $v) {
+                $variance += pow($v - $mean, 2);
+            }
+            $variance /= count($history);
+            $stddev = sqrt($variance);
+            $threshold = max($mean + (2 * $stddev), $mean * 2);
+
+            if ($amount > $threshold && $amount > $mean * 1.5 && $amount >= 100000) {
+                $multiple = $mean > 0 ? round($amount / $mean, 1) : 0;
+                $flagged[] = [
+                    'id' => $row['id'],
+                    'category' => $row['category_name'],
+                    'amount' => $amount,
+                    'date' => $row['transaction_date'],
+                    'multiple' => $multiple,
+                    'text' => $row['category_name'] . ' - ' . number_format($amount, 0, ',', '.') . ' VNĐ ngày ' . date('d/m', strtotime($row['transaction_date'])) . ' (gấp ' . $multiple . ' lần mức chi trung bình của danh mục này)'
+                ];
+            }
+        }
+    }
+
+    return array_slice($flagged, 0, 5);
+}
+
+/**
+ * Project end-of-month expense by separating one-time/fixed costs from variable daily
+ * spending. Shared by both the remote-AI prompt builder and the local fallback so the
+ * projected number is always consistent between the two.
+ */
+function projectEndOfMonthExpense($dashboard, $category_stats, $comparison, $month, $year) {
     $currentYear = (int)date('Y');
     $currentMonth = (int)date('n');
     $daysInMonth = cal_days_in_month(CAL_GREGORIAN, $month, $year);
-
-    $isPastMonth = false;
-    if ($year < $currentYear || ($year == $currentYear && $month < $currentMonth)) {
-        $isPastMonth = true;
-    }
+    $isPastMonth = ($year < $currentYear) || ($year == $currentYear && $month < $currentMonth);
 
     if ($isPastMonth) {
-        $today = $daysInMonth;
-        $daysLeft = 0;
-        $projected = $dashboard['expenses'];
-        $dailyRate = $today > 0 ? $dashboard['expenses'] / $today : 0;
-    } else {
-        $today       = (int)date('j');
-        $daysLeft    = max(0, $daysInMonth - $today);
+        return [
+            'is_past_month' => true,
+            'today' => $daysInMonth,
+            'days_in_month' => $daysInMonth,
+            'days_left' => 0,
+            'daily_rate' => $daysInMonth > 0 ? $dashboard['expenses'] / $daysInMonth : 0,
+            'projected' => $dashboard['expenses'],
+            'one_time_costs' => 0,
+            'fixed_category_names' => []
+        ];
+    }
 
-        // Smart projection: identify one-time fixed costs
-        // A category is "one-time" if it has exactly 1 transaction this month
-        // OR has 2 transactions but represents >25% of total expenses (e.g. rent)
-        $oneTimeCosts = 0;
-        $fixedCategoryNames = [];
-        if (!empty($category_stats)) {
-            foreach ($category_stats as $cat) {
-                $pctOfTotal = $dashboard['expenses'] > 0 ? ($cat['total'] / $dashboard['expenses']) * 100 : 0;
-                $isOneTime = ($cat['count'] == 1 && $cat['total'] > 200000)
-                          || ($cat['count'] <= 2 && $pctOfTotal > 25 && $cat['total'] > 500000);
-                if ($isOneTime) {
-                    $oneTimeCosts += $cat['total'];
-                    $fixedCategoryNames[] = $cat['name'];
-                }
+    $today = (int)date('j');
+    $daysLeft = max(0, $daysInMonth - $today);
+
+    // Smart projection: identify one-time fixed costs.
+    // A category is "one-time" if it has exactly 1 transaction this month
+    // OR has 2 transactions but represents >25% of total expenses (e.g. rent).
+    $oneTimeCosts = 0;
+    $fixedCategoryNames = [];
+    if (!empty($category_stats)) {
+        foreach ($category_stats as $cat) {
+            $pctOfTotal = $dashboard['expenses'] > 0 ? ($cat['total'] / $dashboard['expenses']) * 100 : 0;
+            $isOneTime = ($cat['count'] == 1 && $cat['total'] > 200000)
+                      || ($cat['count'] <= 2 && $pctOfTotal > 25 && $cat['total'] > 500000);
+            if ($isOneTime) {
+                $oneTimeCosts += $cat['total'];
+                $fixedCategoryNames[] = $cat['name'];
             }
         }
-        $variableExpenses = max(0, $dashboard['expenses'] - $oneTimeCosts);
-        // Daily rate only from variable/recurring expenses
-        $dailyRate = $today > 0 ? $variableExpenses / $today : 0;
-
-        // Blended rate for early month (day 1-4): blend with previous month daily rate
-        if ($today < 5 && !empty($comparison) && $comparison['previous_total'] > 0) {
-            $prevDailyRate = $comparison['previous_total'] / 30;
-            $weight = $today / 5;
-            $dailyRate = ($dailyRate * $weight) + ($prevDailyRate * (1 - $weight));
-        }
-        // Projected = fixed costs (counted once) + variable daily rate * full month
-        $projected = round($oneTimeCosts + ($dailyRate * $daysInMonth));
     }
 
-    $prompt  = "Bạn là chuyên gia tư vấn tài chính cá nhân. Phân tích dữ liệu tháng {$month}/{$year} dưới đây và trả về JSON hợp lệ (KHÔNG có text nào ngoài JSON).\n\n";
+    $variableExpenses = max(0, $dashboard['expenses'] - $oneTimeCosts);
+    $dailyRate = $today > 0 ? $variableExpenses / $today : 0;
+
+    // Blended rate for early month (day 1-4): blend with previous month's daily rate.
+    if ($today < 5 && !empty($comparison) && ($comparison['previous_total'] ?? 0) > 0) {
+        $prevDailyRate = $comparison['previous_total'] / 30;
+        $weight = $today / 5;
+        $dailyRate = ($dailyRate * $weight) + ($prevDailyRate * (1 - $weight));
+    }
+
+    $projected = round($oneTimeCosts + ($dailyRate * $daysInMonth));
+
+    return [
+        'is_past_month' => false,
+        'today' => $today,
+        'days_in_month' => $daysInMonth,
+        'days_left' => $daysLeft,
+        'daily_rate' => $dailyRate,
+        'projected' => $projected,
+        'one_time_costs' => $oneTimeCosts,
+        'fixed_category_names' => $fixedCategoryNames
+    ];
+}
+
+/**
+ * Determine budget risk level from the projected end-of-month expense, current usage,
+ * and the multi-month spending trend direction (a rising trend raises risk even before
+ * the budget is technically exceeded).
+ */
+function detectBudgetRisk($dashboard, $projection, $trend) {
+    $budget = floatval($dashboard['budget']);
+    $expenses = floatval($dashboard['expenses']);
+    $projected = floatval($projection['projected']);
+
+    if ($budget <= 0) {
+        return [
+            'risk' => 'Thấp',
+            'note' => 'Chưa thiết lập ngân sách cho tháng này nên chưa thể đánh giá rủi ro vượt ngân sách.'
+        ];
+    }
+
+    if ($expenses > $budget) {
+        return [
+            'risk' => 'Cao',
+            'note' => 'Đã vượt ngân sách ' . number_format($expenses - $budget, 0, ',', '.') . ' VNĐ trong tháng này.'
+        ];
+    }
+
+    $projectedPercent = $budget > 0 ? ($projected / $budget) * 100 : 0;
+    $risk = 'Thấp';
+    $note = 'Ước chi cuối tháng ' . number_format($projected, 0, ',', '.') . ' VNĐ (' . round($projectedPercent) . '% ngân sách). Tình hình đang ổn.';
+
+    if ($projectedPercent >= 100) {
+        $risk = 'Cao';
+        $note = 'Nếu tiếp tục tốc độ chi hiện tại, cuối tháng ước chi ' . number_format($projected, 0, ',', '.') . ' VNĐ, vượt ngân sách ' . number_format($projected - $budget, 0, ',', '.') . ' VNĐ.';
+    } elseif ($projectedPercent >= 85 || ($trend['direction'] ?? '') === 'rising') {
+        $risk = 'Trung bình';
+        $reason = $projectedPercent >= 85 ? 'gần chạm giới hạn ngân sách' : 'xu hướng chi đang tăng liên tục';
+        $note = 'Ước chi cuối tháng ' . number_format($projected, 0, ',', '.') . ' VNĐ (' . round($projectedPercent) . '% ngân sách), ' . $reason . '. Cần theo dõi sát.';
+    }
+
+    return ['risk' => $risk, 'note' => $note];
+}
+
+/**
+ * Calculate the 0-100 financial health score from multiple signals: income/expense
+ * balance, budget usage, savings rate, spending-trend momentum, budget risk, and
+ * abnormal-spending frequency (instead of only income/expense/budget as before).
+ */
+function calculateFinancialHealthScore($dashboard, $savings_rate, $trend, $budget_risk, $abnormal_count) {
+    $income = floatval($dashboard['income']);
+    $expenses = floatval($dashboard['expenses']);
+    $budget = floatval($dashboard['budget']);
+
+    $score = 70;
+
+    if ($income > 0) {
+        $score += $savings_rate < 0 ? -min(30, abs($savings_rate) * 0.6) : min(15, $savings_rate * 0.4);
+    } elseif ($expenses > 0) {
+        $score -= 20;
+    }
+
+    if ($budget > 0) {
+        $usage = ($expenses / $budget) * 100;
+        if ($usage > 100)      { $score -= min(25, ($usage - 100) * 0.6 + 8); }
+        elseif ($usage > 80)   { $score -= 6; }
+        elseif ($usage < 50 && $expenses > 0) { $score += 4; }
+    }
+
+    if (($trend['direction'] ?? '') === 'rising' && ($trend['consecutive_increase_months'] ?? 0) >= 2) {
+        $score -= 8;
+    } elseif (($trend['direction'] ?? '') === 'falling' && ($trend['consecutive_decrease_months'] ?? 0) >= 2) {
+        $score += 5;
+    }
+
+    if (($budget_risk['risk'] ?? '') === 'Cao') { $score -= 10; }
+    elseif (($budget_risk['risk'] ?? '') === 'Trung bình') { $score -= 4; }
+
+    $score -= min(10, $abnormal_count * 4);
+
+    $score = max(10, min(100, round($score)));
+
+    if ($score >= 85)      { $status = 'Tài chính tốt'; }
+    elseif ($score >= 65)  { $status = 'Tài chính ổn định'; }
+    elseif ($score >= 45)  { $status = 'Cần cải thiện'; }
+    else                   { $status = 'Rất cần chú ý'; }
+
+    return ['score' => $score, 'status' => $status];
+}
+
+/**
+ * Generate a prompt for the AI advisor.
+ * $category_trends and $abnormal_transactions are pre-computed server-side (see
+ * analyzeCategoryTrend / detectAbnormalTransactions) so the LLM analyzes real,
+ * already-verified signals instead of guessing from raw totals. Savings goals are a
+ * separate module (see savings.php) and are intentionally not part of this advisor's
+ * analysis.
+ */
+function buildAiAdvisorPrompt($dashboard, $category_stats, $expense_trend, $comparison, $month, $year, $category_trends = [], $abnormal_transactions = []) {
+    $trend = analyzeSpendingTrend($expense_trend);
+    $projection = projectEndOfMonthExpense($dashboard, $category_stats, $comparison, $month, $year);
+    $budget_risk = detectBudgetRisk($dashboard, $projection, $trend);
+    $savings_rate = calculateSavingsRate($dashboard['income'], $dashboard['expenses']);
+
+    $prompt  = "Bạn là chuyên gia tư vấn tài chính cá nhân, hãy PHÂN TÍCH như một cố vấn thực thụ chứ không chỉ tóm tắt lại số liệu. ";
+    $prompt .= "Phân tích dữ liệu tháng {$month}/{$year} dưới đây và trả về JSON hợp lệ (KHÔNG có text nào ngoài JSON).\n\n";
 
     $prompt .= "=== DỮ LIỆU THÁNG {$month}/{$year} ===\n";
-    if ($isPastMonth) {
+    if ($projection['is_past_month']) {
         $prompt .= "- TRẠNG THÁI THÁNG: Đã kết thúc/hoàn thành.\n";
     }
     $prompt .= "- Tổng thu: "     . number_format($dashboard['income'], 0, ',', '.') . " VNĐ\n";
     $prompt .= "- Tổng chi: "     . number_format($dashboard['expenses'], 0, ',', '.') . " VNĐ\n";
     $prompt .= "- Số dư: "        . number_format($dashboard['income_expense_diff'], 0, ',', '.') . " VNĐ\n";
+    $prompt .= "- Tỷ lệ tiết kiệm: {$savings_rate}% (mức khuyến nghị: 20%)\n";
+    $prompt .= "- Tổng tài sản (tất cả ví): " . number_format($dashboard['total_assets'], 0, ',', '.') . " VNĐ\n";
     $prompt .= "- Ngân sách: "    . number_format($dashboard['budget'], 0, ',', '.') . " VNĐ\n";
     $prompt .= "- Đã dùng: "      . round($dashboard['budget_percentage'] ?? 0) . "% ngân sách\n";
     $prompt .= "- Trạng thái: "   . ($dashboard['budget_exceeded'] ? 'Vượt ' . number_format($dashboard['budget_overflow'] ?? 0, 0, ',', '.') . ' VNĐ' : 'Còn ' . number_format($dashboard['budget_remaining'], 0, ',', '.') . ' VNĐ') . "\n";
-    $prompt .= "- Ngày trong tháng: {$today}/{$daysInMonth} (còn {$daysLeft} ngày)\n";
-    $prompt .= "- Chi mỗi ngày TB: " . number_format($dailyRate, 0, ',', '.') . " VNĐ\n";
-    $prompt .= "- Dự kiến chi cuối tháng (nếu tháng cũ thì dự kiến bằng thực tế): " . number_format($projected, 0, ',', '.') . " VNĐ\n\n";
+    $prompt .= "- Ngày trong tháng: {$projection['today']}/{$projection['days_in_month']} (còn {$projection['days_left']} ngày)\n";
+    $prompt .= "- Chi mỗi ngày TB (không tính khoản chi 1 lần): " . number_format($projection['daily_rate'], 0, ',', '.') . " VNĐ\n";
+    $prompt .= "- Dự kiến chi cuối tháng: " . number_format($projection['projected'], 0, ',', '.') . " VNĐ\n";
+    $prompt .= "- Mức rủi ro vượt ngân sách (đã tính sẵn): {$budget_risk['risk']} — {$budget_risk['note']}\n\n";
+
+    $prompt .= "=== XU HƯỚNG CHI TIÊU NHIỀU THÁNG (đã tính sẵn) ===\n";
+    $prompt .= "- Xu hướng: " . ($trend['direction'] === 'rising' ? 'Tăng' : ($trend['direction'] === 'falling' ? 'Giảm' : ($trend['direction'] === 'stable' ? 'Ổn định' : 'Chưa rõ'))) . "\n";
+    $prompt .= "- " . $trend['note'] . "\n\n";
 
     if (!empty($comparison)) {
         $prevExpense     = floatval($comparison['previous_total'] ?? 0);
@@ -412,11 +773,21 @@ function buildAiAdvisorPrompt($dashboard, $category_stats, $expense_trend, $comp
     }
 
     if (!empty($category_stats)) {
-        $prompt .= "=== CHI TIÊU THEO DANH MỤC ===\n";
+        $prompt .= "=== CHI TIÊU THEO DANH MỤC (THÁNG NÀY) ===\n";
         $totalExp = $dashboard['expenses'];
         foreach ($category_stats as $cat) {
             $pct = $totalExp > 0 ? round(($cat['total'] / $totalExp) * 100, 1) : 0;
             $prompt .= "- {$cat['name']}: " . number_format($cat['total'], 0, ',', '.') . " VNĐ ({$pct}%, {$cat['count']} GD)\n";
+        }
+        $prompt .= "\n";
+    }
+
+    if (!empty($category_trends)) {
+        $prompt .= "=== BIẾN ĐỘNG DANH MỤC SO VỚI THÁNG TRƯỚC (đã tính sẵn) ===\n";
+        foreach (array_slice($category_trends, 0, 6) as $t) {
+            if ($t['previous'] <= 0 && $t['current'] <= 0) continue;
+            $sign = $t['change_percent'] >= 0 ? '+' : '';
+            $prompt .= "- {$t['name']}: {$sign}{$t['change_percent']}% (từ " . number_format($t['previous'], 0, ',', '.') . " lên " . number_format($t['current'], 0, ',', '.') . " VNĐ)\n";
         }
         $prompt .= "\n";
     }
@@ -429,8 +800,16 @@ function buildAiAdvisorPrompt($dashboard, $category_stats, $expense_trend, $comp
         $prompt .= "\n";
     }
 
+    if (!empty($abnormal_transactions)) {
+        $prompt .= "=== GIAO DỊCH BẤT THƯỜNG PHÁT HIỆN ĐƯỢC (đã tính sẵn) ===\n";
+        foreach ($abnormal_transactions as $tx) {
+            $prompt .= "- " . $tx['text'] . "\n";
+        }
+        $prompt .= "\n";
+    }
+
     $prompt .= "=== YÊU CẦU ===\n";
-    $prompt .= "Trả về JSON (không có text khác ngoài JSON):\n\n";
+    $prompt .= "Sử dụng các số liệu đã tính toán sẵn ở trên (xu hướng nhiều tháng, rủi ro ngân sách, giao dịch bất thường) để đưa ra nhận định và khuyến nghị CỤ THỂ, có thể hành động ngay được — không lặp lại số liệu thô. KHÔNG phân tích mục tiêu tiết kiệm (savings goals) — đó là một module riêng. Trả về JSON (không có text khác ngoài JSON):\n\n";
     $prompt .= "{\n";
     $prompt .= '  "score": <số nguyên 0-100>,' . "\n";
     $prompt .= '  "status": "Tài chính tốt" | "Tài chính ổn định" | "Cần cải thiện" | "Rất cần chú ý",' . "\n";
@@ -440,25 +819,25 @@ function buildAiAdvisorPrompt($dashboard, $category_stats, $expense_trend, $comp
     $prompt .= '    "income_change": "<thu nhập tăng/giảm % so với tháng trước, hoặc N/A>",' . "\n";
     $prompt .= '    "expense_change": "<chi tiêu tăng/giảm % so với tháng trước>",' . "\n";
     $prompt .= '    "balance": "<số dư hiện tại bằng VNĐ>",' . "\n";
-    $prompt .= '    "note": "<1-2 câu tóm tắt tổng quan>"' . "\n";
+    $prompt .= '    "note": "<1-2 câu đánh giá sức khỏe tài chính tổng thể, có đề cập tỷ lệ tiết kiệm>"' . "\n";
     $prompt .= '  },' . "\n";
     $prompt .= '  "spending_trend": {' . "\n";
     $prompt .= '    "top_category": "<danh mục chiếm tỷ trọng lớn nhất>",' . "\n";
     $prompt .= '    "top_category_percent": "<tỷ lệ %>",' . "\n";
-    $prompt .= '    "rising_categories": ["<danh mục đang tăng, VD: Giải trí tăng 30%>"],' . "\n";
-    $prompt .= '    "note": "<1-2 câu nhận xét xu hướng>"' . "\n";
+    $prompt .= '    "rising_categories": ["<danh mục tăng mạnh so với tháng trước, VD: Giải trí tăng 32%>"],' . "\n";
+    $prompt .= '    "note": "<nhận xét xu hướng chi tiêu NHIỀU THÁNG — tăng/giảm/ổn định liên tục mấy tháng — không chỉ so với 1 tháng>"' . "\n";
     $prompt .= '  },' . "\n";
     $prompt .= '  "anomalies": {' . "\n";
     $prompt .= '    "found": <true/false>,' . "\n";
-    $prompt .= '    "items": ["<mô tả bất thường cụ thể nếu có>"]' . "\n";
+    $prompt .= '    "items": ["<liệt kê giao dịch/khoản chi bất thường cụ thể, ưu tiên dùng danh sách đã phát hiện sẵn ở trên>"]' . "\n";
     $prompt .= '  },' . "\n";
     $prompt .= '  "prediction": {' . "\n";
     $prompt .= '    "projected_expense": "<tổng chi dự kiến cuối tháng, chỉ số không có dấu phẩy>",' . "\n";
     $prompt .= '    "risk": "Thấp" | "Trung bình" | "Cao",' . "\n";
-    $prompt .= '    "note": "<1-2 câu về nguy cơ vượt ngân sách>"' . "\n";
+    $prompt .= '    "note": "<giải thích rủi ro vượt ngân sách, có thể tham khảo mức rủi ro đã tính sẵn ở trên>"' . "\n";
     $prompt .= '  },' . "\n";
-    $prompt .= '  "recommendations": ["<gợi ý 1 cụ thể>", "<gợi ý 2>", "<gợi ý 3>"],' . "\n";
-    $prompt .= '  "warning": "<cảnh báo quan trọng nhất nếu có, để trống nếu không>"' . "\n";
+    $prompt .= '  "recommendations": ["<3-5 khuyến nghị cụ thể, có thể hành động ngay; ưu tiên đề cập danh mục chi tiêu tăng mạnh nếu có>"],' . "\n";
+    $prompt .= '  "warning": "<cảnh báo quan trọng nhất nếu có (ngân sách), để trống nếu không>"' . "\n";
     $prompt .= "}\n";
 
     return $prompt;
@@ -466,36 +845,28 @@ function buildAiAdvisorPrompt($dashboard, $category_stats, $expense_trend, $comp
 
 /**
  * Generate local fallback advice when AI key is not configured or remote API fails.
+ * Same JSON shape as before (score/status/summary/spending_trend/anomalies/prediction/
+ * recommendations/warning) so the existing dashboard UI renders unchanged — only the
+ * analysis feeding those fields is deeper: real multi-month trend, real category trend,
+ * and per-transaction anomaly detection. Savings goals are a separate module and are
+ * intentionally not analyzed here (see savings.php).
  */
-function getLocalAiFinancialAdvice($dashboard, $category_stats, $expense_trend, $month, $year, $comparison = []) {
+function getLocalAiFinancialAdvice($dashboard, $category_stats, $expense_trend, $month, $year, $comparison = [], $category_trends = [], $abnormal_transactions = []) {
     $income   = floatval($dashboard['income']);
     $expenses = floatval($dashboard['expenses']);
     $budget   = floatval($dashboard['budget']);
     $diff     = $income - $expenses;
 
-    // --- Score calculation ---
-    $score = 75;
-    if ($income > 0) {
-        $savings_rate = ($diff / $income) * 100;
-        $score += $savings_rate < 0 ? -min(30, abs($savings_rate) * 0.5) : min(15, $savings_rate * 0.3);
-    } elseif ($expenses > 0) {
-        $score -= 20;
-    }
-    if ($budget > 0) {
-        $bu = ($expenses / $budget) * 100;
-        if ($bu > 100)      { $score -= min(30, ($bu - 100) * 0.6 + 10); }
-        elseif ($bu > 80)   { $score -= 10; }
-        elseif ($bu < 50 && $expenses > 0) { $score += 5; }
-    }
-    $score = max(10, min(100, round($score)));
+    $savings_rate = calculateSavingsRate($income, $expenses);
+    $trend        = analyzeSpendingTrend($expense_trend);
+    $projection   = projectEndOfMonthExpense($dashboard, $category_stats, $comparison, $month, $year);
+    $budget_risk  = detectBudgetRisk($dashboard, $projection, $trend);
+    $health       = calculateFinancialHealthScore($dashboard, $savings_rate, $trend, $budget_risk, count($abnormal_transactions));
 
-    // Status
-    if ($score >= 85)      { $status = 'Tài chính tốt'; }
-    elseif ($score >= 65)  { $status = 'Tài chính ổn định'; }
-    elseif ($score >= 45)  { $status = 'Cần cải thiện'; }
-    else                   { $status = 'Rất cần chú ý'; }
+    $score  = $health['score'];
+    $status = $health['status'];
 
-    // --- 1. SUMMARY ---
+    // --- 1. SUMMARY (financial health assessment) ---
     $prevExpense     = floatval($comparison['previous_total'] ?? 0);
     $prevIncome      = floatval($comparison['prev_income'] ?? 0);
     $expChangePct    = floatval($comparison['percent'] ?? 0);
@@ -505,8 +876,16 @@ function getLocalAiFinancialAdvice($dashboard, $category_stats, $expense_trend, 
         $incomeChangeStr = ($icp >= 0 ? '+' : '') . $icp . '%';
     }
     $expChangeStr = ($expChangePct >= 0 ? '+' : '') . round($expChangePct, 1) . '%';
+
+    $savingsNote = '';
+    if ($income > 0) {
+        $savingsNote = $savings_rate >= 20
+            ? " Tỷ lệ tiết kiệm {$savings_rate}%, cao hơn mức khuyến nghị 20%."
+            : " Tỷ lệ tiết kiệm chỉ {$savings_rate}%, thấp hơn mức khuyến nghị 20%.";
+    }
     $summaryNote = 'Chi tiêu tháng ' . $month . ' là ' . number_format($expenses, 0, ',', '.') . ' VNĐ'
-        . ($income > 0 ? ', chiếm ' . round(($expenses / $income) * 100) . '% thu nhập.' : '.');
+        . ($income > 0 ? ', chiếm ' . round(($expenses / $income) * 100) . '% thu nhập.' : '.') . $savingsNote;
+
     $summary = [
         'income_amount'  => number_format($income, 0, ',', '.') . ' VNĐ',
         'expense_amount' => number_format($expenses, 0, ',', '.') . ' VNĐ',
@@ -516,7 +895,7 @@ function getLocalAiFinancialAdvice($dashboard, $category_stats, $expense_trend, 
         'note'           => $summaryNote,
     ];
 
-    // --- 2. SPENDING TREND ---
+    // --- 2. SPENDING TREND (multi-month direction + category movers) ---
     $topCatName = 'Chưa có dữ liệu';
     $topCatPct  = '—';
     if (!empty($category_stats)) {
@@ -524,141 +903,77 @@ function getLocalAiFinancialAdvice($dashboard, $category_stats, $expense_trend, 
         $topCatName = $top['name'];
         $topCatPct  = $expenses > 0 ? round(($top['total'] / $expenses) * 100) . '%' : '—';
     }
-    $trendNote = $topCatName !== 'Chưa có dữ liệu'
-        ? "Danh mục {$topCatName} chiếm {$topCatPct} tổng chi tiêu tháng {$month}. Theo dõi sát để kiểm soát hiệu quả."
-        : 'Chưa có đủ dữ liệu để phân tích xu hướng.';
+    $rising_categories = formatRisingCategories($category_trends);
+
+    $trendNote = $trend['note'];
+    if ($topCatName !== 'Chưa có dữ liệu') {
+        $trendNote .= " Danh mục {$topCatName} chiếm {$topCatPct} tổng chi tháng {$month}.";
+    }
+
     $spending_trend = [
         'top_category'         => $topCatName,
         'top_category_percent' => $topCatPct,
-        'rising_categories'    => [],
+        'rising_categories'    => $rising_categories,
         'note'                 => $trendNote,
     ];
 
-    // --- 3. ANOMALIES ---
-    $anomalyFound  = false;
-    $anomalyItems  = [];
+    // --- 3. ANOMALIES (per-transaction outliers + aggregate checks) ---
+    $anomalyItems = [];
+    foreach ($abnormal_transactions as $tx) {
+        $anomalyItems[] = $tx['text'];
+    }
     if ($dashboard['budget_exceeded']) {
-        $anomalyFound = true;
         $anomalyItems[] = 'Chi tiêu vượt ngân sách ' . number_format($dashboard['budget_overflow'] ?? 0, 0, ',', '.') . ' VNĐ.';
     }
     if (abs($expChangePct) > 50) {
-        $anomalyFound = true;
         $dir = $expChangePct > 0 ? 'tăng' : 'giảm';
         $anomalyItems[] = 'Chi tiêu ' . $dir . ' bất thường ' . abs(round($expChangePct)) . '% so với tháng trước.';
     }
-    if (!$anomalyFound && !empty($category_stats) && $expenses > 0) {
+    if (empty($anomalyItems) && !empty($category_stats) && $expenses > 0) {
         $topPct = ($category_stats[0]['total'] / $expenses) * 100;
         if ($topPct > 60) {
-            $anomalyFound = true;
             $anomalyItems[] = 'Danh mục "' . $category_stats[0]['name'] . '" chiếm tới ' . round($topPct) . '% tổng chi — cao bất thường.';
         }
     }
-    $anomalies = ['found' => $anomalyFound, 'items' => $anomalyItems];
+    $anomalies = ['found' => !empty($anomalyItems), 'items' => $anomalyItems];
 
-    // --- 4. PREDICTION ---
-    $currentYear = (int)date('Y');
-    $currentMonth = (int)date('n');
-    $daysInMonth = cal_days_in_month(CAL_GREGORIAN, $month, $year);
-
-    $isPastMonth = false;
-    if ($year < $currentYear || ($year == $currentYear && $month < $currentMonth)) {
-        $isPastMonth = true;
-    }
-
-    if ($isPastMonth) {
-        $projected = $expenses;
-        $risk = $budget > 0 && $expenses > $budget ? 'Cao' : 'Thấp';
-        if ($budget > 0) {
-            $exceeded = $expenses > $budget;
-            if ($exceeded) {
-                $predNote = 'Tháng đã kết thúc. Tổng chi tiêu thực tế đã vượt ngân sách ' . number_format($expenses - $budget, 0, ',', '.') . ' VNĐ.';
-            } else {
-                $predNote = 'Tháng đã kết thúc. Tổng chi tiêu thực tế đã được kiểm soát an toàn trong ngân sách.';
-            }
-        } else {
-            $predNote = 'Tháng đã kết thúc. Tổng chi tiêu thực tế là ' . number_format($expenses, 0, ',', '.') . ' VNĐ (chưa thiết lập ngân sách).';
-        }
-    } else {
-        $today = (int)date('j');
-        
-        // Smart prediction: separate fixed one-time costs from variable daily spending
-        // One-time: single transaction in month, or <=2 transactions that represent >25% of expenses
-        $oneTimeCosts = 0;
-        $fixedNames = [];
-        if (!empty($category_stats)) {
-            foreach ($category_stats as $cat) {
-                $pctOfTotal = $expenses > 0 ? ($cat['total'] / $expenses) * 100 : 0;
-                $isOneTime = ($cat['count'] == 1 && $cat['total'] > 200000)
-                          || ($cat['count'] <= 2 && $pctOfTotal > 25 && $cat['total'] > 500000);
-                if ($isOneTime) {
-                    $oneTimeCosts += $cat['total'];
-                    $fixedNames[] = $cat['name'];
-                }
-            }
-        }
-        $variableExpenses = max(0, $expenses - $oneTimeCosts);
-        // Daily rate = only variable/recurring spending
-        $dailyRate = $today > 0 ? $variableExpenses / $today : 0;
-
-        // Blended rate for early month
-        if ($today < 5 && !empty($comparison) && $comparison['previous_total'] > 0) {
-            $prevDailyRate = $comparison['previous_total'] / 30;
-            $weight = $today / 5;
-            $dailyRate = ($dailyRate * $weight) + ($prevDailyRate * (1 - $weight));
-        }
-        // Projected = fixed (once) + variable rate extrapolated for whole month
-        $projected = round($oneTimeCosts + ($dailyRate * $daysInMonth));
-
-        $risk = 'Thấp';
-        $predNote = '';
-        if ($budget > 0) {
-            $pp = ($projected / $budget) * 100;
-            if ($pp >= 100) {
-                $risk = 'Cao';
-                $predNote = 'Nếu tiếp tục tốc độ hiện tại, cuối tháng ước chi ' . number_format($projected, 0, ',', '.') . ' VNĐ, vượt ngân sách ' . number_format($projected - $budget, 0, ',', '.') . ' VNĐ.';
-            } elseif ($pp >= 80) {
-                $risk = 'Trung bình';
-                $predNote = 'Ước chi cuối tháng ' . number_format($projected, 0, ',', '.') . ' VNĐ (' . round($pp) . '% ngân sách). Cần theo dõi sát.';
-            } else {
-                $predNote = 'Ước chi cuối tháng ' . number_format($projected, 0, ',', '.') . ' VNĐ (' . round($pp) . '% ngân sách). Tình hình tốt.';
-            }
-        } else {
-            $predNote = 'Chưa thiết lập ngân sách. Ước chi cuối tháng khoảng ' . number_format($projected, 0, ',', '.') . ' VNĐ.';
-        }
-    }
-
+    // --- 4. PREDICTION (end-of-month forecast + budget risk) ---
     $prediction = [
-        'projected_expense' => (string)$projected,
-        'risk'              => $risk,
-        'note'              => $predNote,
+        'projected_expense' => (string) $projection['projected'],
+        'risk'              => $budget_risk['risk'],
+        'note'              => $budget_risk['note'],
     ];
 
-    // --- 5. RECOMMENDATIONS ---
+    // --- 5. RECOMMENDATIONS (3-5, personalized) ---
     $recommendations = [];
+    foreach ($category_trends as $t) {
+        if ($t['direction'] === 'up' && $t['previous'] > 0 && $t['change_percent'] >= 15) {
+            $recommendations[] = 'Danh mục "' . $t['name'] . '" tăng ' . round($t['change_percent']) . '% so với tháng trước — cân nhắc đặt hạn mức riêng cho danh mục này.';
+            break;
+        }
+    }
     if (!empty($category_stats)) {
         $top = $category_stats[0];
-        $recommendations[] = 'Giảm chi danh mục "' . $top['name'] . '" (hiện ' . number_format($top['total'], 0, ',', '.') . ' VNĐ).';
+        $recommendations[] = 'Giảm chi danh mục "' . $top['name'] . '" (hiện ' . number_format($top['total'], 0, ',', '.') . ' VNĐ) để cải thiện số dư cuối tháng.';
     }
-    if ($income > 0 && ($diff / $income) < 0.2) {
-        $recommendations[] = 'Tăng tỷ lệ tiết kiệm lên ít nhất 20% thu nhập mỗi tháng.';
+    if ($income > 0 && $savings_rate < 20) {
+        $recommendations[] = 'Tăng tỷ lệ tiết kiệm lên ít nhất 20% thu nhập (hiện tại ' . $savings_rate . '%).';
     }
     if ($budget == 0) {
         $recommendations[] = 'Thiết lập ngân sách tháng để kiểm soát chi tiêu hiệu quả.';
-    } elseif ($dashboard['budget_exceeded']) {
-        $recommendations[] = 'Cắt giảm chi tiêu ngay để không vượt ngân sách thêm.';
+    } elseif ($budget_risk['risk'] !== 'Thấp') {
+        $recommendations[] = 'Cắt giảm chi tiêu trong ' . ($projection['days_left'] ?? 0) . ' ngày còn lại để không vượt ngân sách.';
     }
-    $recommendations[] = 'Lập kế hoạch chi tiêu hàng tuần và ghi chép đầy đủ giao dịch.';
     if (count($recommendations) < 3) {
         $recommendations[] = 'Theo dõi xu hướng chi tiêu hàng tháng để phát hiện sớm bất thường.';
     }
+    $recommendations = array_slice($recommendations, 0, 5);
 
-    // Warning
+    // --- WARNING (single most urgent issue) ---
     $warning = '';
     if ($dashboard['budget_exceeded']) {
         $warning = 'Đã vượt ngân sách ' . number_format($dashboard['budget_overflow'] ?? 0, 0, ',', '.') . ' VNĐ. Cần cắt giảm chi tiêu ngay.';
-    } elseif ($budget > 0 && $dashboard['budget_remaining'] < ($budget * 0.1)) {
-        $warning = 'Ngân sách còn lại rất ít (' . number_format($dashboard['budget_remaining'], 0, ',', '.') . ' VNĐ). Cần cẩn trọng.';
-    } elseif ($risk === 'Cao') {
+    } elseif ($budget_risk['risk'] === 'Cao') {
         $warning = 'Dự kiến vượt ngân sách cuối tháng nếu tiếp tục tốc độ chi hiện tại.';
     }
 
@@ -671,7 +986,7 @@ function getLocalAiFinancialAdvice($dashboard, $category_stats, $expense_trend, 
         'prediction'     => $prediction,
         'recommendations'=> $recommendations,
         'warning'        => $warning,
-        'version'        => 'v1.3',
+        'version'        => 'v2.2',
         // Legacy compat
         'analysis'       => $summaryNote,
         'suggestions'    => $recommendations,
@@ -735,7 +1050,7 @@ function parseAiResponse($response) {
         $parsed['suggestions'] = $parsed['recommendations'] ?? [];
     }
 
-    $parsed['version'] = 'v1.2';
+    $parsed['version'] = 'v2.2';
     return $parsed;
 }
 
@@ -816,29 +1131,32 @@ function fetchAiAdvisorFromApi($prompt) {
 
 /**
  * Generate a financial state hash for a user to determine if cache needs invalidation.
+ * Only reflects data the AI advisor actually analyzes (transactions, budget, wallets) —
+ * savings goals are a separate module and are not part of this hash.
  */
 function getUserFinancialStateHash($user_id, $db, $month, $year) {
     // Get count and sum of transactions for this month/year
-    $query = "SELECT COUNT(*) as cnt, COALESCE(SUM(amount), 0) as total, COALESCE(MAX(id), 0) as max_id 
-              FROM transactions 
+    $query = "SELECT COUNT(*) as cnt, COALESCE(SUM(amount), 0) as total, COALESCE(MAX(id), 0) as max_id
+              FROM transactions
               WHERE user_id = ? AND MONTH(transaction_date) = ? AND YEAR(transaction_date) = ?";
     $res = $db->execute($query, [$user_id, $month, $year]);
     $row = $res ? $res->fetch_assoc() : ['cnt' => 0, 'total' => 0, 'max_id' => 0];
-    
+
     // Get budget
-    $budget_query = "SELECT budget_amount FROM budgets WHERE user_id = ? AND month = ? AND year = ? LIMIT 1";
+    $budget_query = "SELECT limit_amount FROM budgets WHERE user_id = ? AND month = ? AND year = ? LIMIT 1";
     $b_res = $db->execute($budget_query, [$user_id, $month, $year]);
     $budget = 0;
     if ($b_res && $b_res->num_rows > 0) {
-        $budget = floatval($b_res->fetch_assoc()['budget_amount'] ?? 0);
+        $budget = floatval($b_res->fetch_assoc()['limit_amount'] ?? 0);
     }
-    
+
     // Get wallets information
     $wallet_query = "SELECT COUNT(*) as cnt, COALESCE(SUM(initial_balance), 0) as bal FROM wallets WHERE user_id = ?";
     $w_res = $db->execute($wallet_query, [$user_id]);
     $w_row = $w_res ? $w_res->fetch_assoc() : ['cnt' => 0, 'bal' => 0];
-    
-    return md5(($row['cnt'] ?? 0) . '_' . ($row['total'] ?? 0) . '_' . ($row['max_id'] ?? 0) . '_' . $budget . '_' . ($w_row['cnt'] ?? 0) . '_' . ($w_row['bal'] ?? 0));
+
+    return md5(($row['cnt'] ?? 0) . '_' . ($row['total'] ?? 0) . '_' . ($row['max_id'] ?? 0) . '_' . $budget . '_'
+        . ($w_row['cnt'] ?? 0) . '_' . ($w_row['bal'] ?? 0));
 }
 
 /**
@@ -860,25 +1178,38 @@ function getAiFinancialAdvice($user_id, $db, $month = null, $year = null) {
         $category_stats[] = $row;
     }
 
-    $expense_trend = getRecentExpenseSummary($user_id, $db, 6);
-    $prompt = buildAiAdvisorPrompt($dashboard, $category_stats, $expense_trend, $comparison, $month, $year);
+    $expense_trend = getRecentExpenseSummary($user_id, $db, 6, $month, $year);
+
+    // Pre-computed, verified analysis passed to both the remote-AI prompt and the local
+    // fallback, so neither path has to guess trend/anomaly signals from raw totals.
+    // Savings goals are a separate module (see savings.php) and are intentionally
+    // excluded from this advisor's analysis.
+    $category_trends       = analyzeCategoryTrend($user_id, $db, $month, $year);
+    $abnormal_transactions = detectAbnormalTransactions($user_id, $db, $month, $year);
+
+    $prompt = buildAiAdvisorPrompt($dashboard, $category_stats, $expense_trend, $comparison, $month, $year, $category_trends, $abnormal_transactions);
 
     $remote = fetchAiAdvisorFromApi($prompt);
     if ($remote) {
         return $remote;
     }
 
-    return getLocalAiFinancialAdvice($dashboard, $category_stats, $expense_trend, $month, $year, $comparison);
+    return getLocalAiFinancialAdvice($dashboard, $category_stats, $expense_trend, $month, $year, $comparison, $category_trends, $abnormal_transactions);
 }
 
 /**
- * Get recent expense summary for the last N months
+ * Get recent expense summary for the last N months, ending at the given month/year
+ * (defaults to the current real month, same as before, when not specified).
  */
-function getRecentExpenseSummary($user_id, $db, $months = 6) {
+function getRecentExpenseSummary($user_id, $db, $months = 6, $anchor_month = null, $anchor_year = null) {
     $months = max(1, intval($months));
-    $end = new DateTimeImmutable('last day of this month');
+    if ($anchor_month && $anchor_year) {
+        $end = (new DateTimeImmutable(sprintf('%04d-%02d-01', intval($anchor_year), intval($anchor_month))))->modify('last day of this month');
+    } else {
+        $end = new DateTimeImmutable('last day of this month');
+    }
     if ($months === 1) {
-        $start = new DateTimeImmutable('first day of this month');
+        $start = $end->modify('first day of this month');
     } else {
         $start = $end->modify(sprintf('first day of -%d month', $months - 1));
     }
@@ -1508,6 +1839,54 @@ function getSavingsGoalById($goal_id, $user_id, $db) {
               WHERE sg.id = ? AND sg.user_id = ? LIMIT 1";
     $res = $db->execute($query, [$goal_id, $user_id]);
     return ($res && $res->num_rows > 0) ? $res->fetch_assoc() : null;
+}
+
+/**
+ * Core savings-plan calculation for a single goal, shared by the goal cards UI and the
+ * AI advisor so both use the exact same numbers. Expects a goal row as returned by
+ * getSavingsGoals()/getSavingsGoalById() (has 'current_amount_live', 'target_amount',
+ * 'target_date', 'status').
+ *
+ * remaining_amount  = target_amount - current_amount
+ * daily_required    = remaining_amount / remaining_days
+ * monthly_required  = remaining_amount / (remaining_days / 30)
+ */
+function calculateSavingsGoalPlan($goal) {
+    $target_amount = floatval($goal['target_amount']);
+    $current_amount = floatval($goal['current_amount_live'] ?? $goal['current_amount']);
+    $remaining_amount = max(0, $target_amount - $current_amount);
+    $is_completed = ($goal['status'] ?? '') === 'completed' || $remaining_amount <= 0;
+
+    $today = new DateTime('today');
+    $target_dt = new DateTime($goal['target_date']);
+    $diff_days = (int)$today->diff($target_dt)->format('%r%a');
+
+    $is_overdue = !$is_completed && $diff_days < 0;
+    $remaining_days = $is_completed ? 0 : max(0, $diff_days);
+    $is_urgent = !$is_completed && !$is_overdue && $remaining_days <= 30;
+
+    $daily_required = 0;
+    $weekly_required = 0;
+    $monthly_required = 0;
+    if (!$is_completed && !$is_overdue) {
+        $divisor_days = max($remaining_days, 1);
+        $daily_required = $remaining_amount / $divisor_days;
+        $weekly_required = $daily_required * 7;
+        $monthly_required = $remaining_amount / ($divisor_days / 30);
+    }
+
+    return [
+        'target_amount'    => $target_amount,
+        'current_amount'   => $current_amount,
+        'remaining_amount' => $remaining_amount,
+        'remaining_days'   => $remaining_days,
+        'is_completed'     => $is_completed,
+        'is_overdue'       => $is_overdue,
+        'is_urgent'        => $is_urgent,
+        'daily_required'   => $daily_required,
+        'weekly_required'  => $weekly_required,
+        'monthly_required' => $monthly_required,
+    ];
 }
 
 /**

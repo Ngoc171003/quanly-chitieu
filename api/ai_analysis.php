@@ -28,11 +28,11 @@ $force = isset($data['force']) ? (bool)$data['force'] : false;
 // Generate current state hash
 $state_hash = getUserFinancialStateHash($user_id, $db, $month, $year);
 
-// Check cache (and ensure it contains the new structure format version v1.2)
-if (!$force && isset($_SESSION['ai_cache'][$month][$year]) 
-    && $_SESSION['ai_cache'][$month][$year]['hash'] === $state_hash 
+// Check cache (and ensure it contains the current structure format version)
+if (!$force && isset($_SESSION['ai_cache'][$month][$year])
+    && $_SESSION['ai_cache'][$month][$year]['hash'] === $state_hash
     && isset($_SESSION['ai_cache'][$month][$year]['advice']['version'])
-    && $_SESSION['ai_cache'][$month][$year]['advice']['version'] === 'v1.3') {
+    && $_SESSION['ai_cache'][$month][$year]['advice']['version'] === 'v2.2') {
     $advice = $_SESSION['ai_cache'][$month][$year]['advice'];
     echo json_encode(['success' => true, 'advice' => $advice, 'cached' => true]);
     exit;

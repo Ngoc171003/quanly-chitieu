@@ -142,11 +142,10 @@ if ($all_goals && $all_goals->num_rows > 0) {
     <?php
         $current = floatval($goal['current_amount_live'] ?? $goal['current_amount']);
         $percent = $goal['target_amount'] > 0 ? min(100, ($current / $goal['target_amount']) * 100) : 0;
-        $remaining = max(0, floatval($goal['target_amount']) - $current);
-        $target_dt = new DateTime($goal['target_date']);
-        $now = new DateTime();
-        $days_left = max(0, (int)$now->diff($target_dt)->format('%r%a'));
-        $is_overdue = $target_dt < $now;
+        $plan = calculateSavingsGoalPlan($goal);
+        $remaining = $plan['remaining_amount'];
+        $days_left = $plan['remaining_days'];
+        $is_overdue = $plan['is_overdue'];
     ?>
     <div class="col-md-6 col-lg-4 mb-4">
         <div class="card h-100 border-0 shadow-sm">
@@ -193,6 +192,39 @@ if ($all_goals && $all_goals->num_rows > 0) {
                             <small class="fw-semibold <?php echo $is_overdue ? 'text-danger' : ''; ?>"><?php echo date('d/m/Y', strtotime($goal['target_date'])); ?></small>
                         </div>
                     </div>
+
+                    <!-- Saving plan -->
+                    <?php if ($is_overdue): ?>
+                    <div class="rounded-3 p-2 mb-3 bg-danger bg-opacity-10 text-danger small fw-semibold">
+                        <i class="fas fa-exclamation-triangle me-1"></i> Mục tiêu đã quá hạn.
+                    </div>
+                    <?php else: ?>
+                    <div class="rounded-3 p-3 mb-3 <?php echo $plan['is_urgent'] ? 'bg-warning bg-opacity-10 border border-warning' : ''; ?>" style="<?php echo $plan['is_urgent'] ? '' : 'background:rgba(79,139,255,.06);'; ?>">
+                        <div class="small fw-semibold mb-2"><i class="fas fa-bullseye me-1 <?php echo $plan['is_urgent'] ? 'text-warning' : 'text-primary'; ?>"></i>Kế hoạch tiết kiệm</div>
+                        <div class="row g-2 text-center">
+                            <div class="col-6">
+                                <div class="text-muted" style="font-size: 0.7rem;">Còn thiếu</div>
+                                <div class="fw-bold small"><?php echo formatCurrency($plan['remaining_amount']); ?></div>
+                            </div>
+                            <div class="col-6">
+                                <div class="text-muted" style="font-size: 0.7rem;">Thời gian còn lại</div>
+                                <div class="fw-bold small"><?php echo $plan['remaining_days']; ?> ngày</div>
+                            </div>
+                            <div class="col-4">
+                                <div class="text-muted" style="font-size: 0.7rem;">Cần/ngày</div>
+                                <div class="fw-bold small <?php echo $plan['is_urgent'] ? 'text-danger' : 'text-primary'; ?>"><?php echo formatCurrency($plan['daily_required']); ?></div>
+                            </div>
+                            <div class="col-4">
+                                <div class="text-muted" style="font-size: 0.7rem;">Cần/tuần</div>
+                                <div class="fw-bold small <?php echo $plan['is_urgent'] ? 'text-danger' : 'text-primary'; ?>"><?php echo formatCurrency($plan['weekly_required']); ?></div>
+                            </div>
+                            <div class="col-4">
+                                <div class="text-muted" style="font-size: 0.7rem;">Cần/tháng</div>
+                                <div class="fw-bold small <?php echo $plan['is_urgent'] ? 'text-danger' : 'text-primary'; ?>"><?php echo formatCurrency($plan['monthly_required']); ?></div>
+                            </div>
+                        </div>
+                    </div>
+                    <?php endif; ?>
                 </div>
 
                 <div class="d-flex justify-content-between gap-2 border-top pt-3">
@@ -259,6 +291,7 @@ if ($all_goals && $all_goals->num_rows > 0) {
                 <div class="progress mb-2" style="height: 8px; border-radius: 8px;">
                     <div class="progress-bar bg-success" role="progressbar" style="width: 100%; border-radius: 8px;"></div>
                 </div>
+                <div class="small fw-semibold text-success mb-2"><i class="fas fa-check-circle me-1"></i>Đã hoàn thành mục tiêu thành công!</div>
                 <div class="d-flex justify-content-between align-items-center">
                     <small class="text-muted">Đã tiết kiệm:</small>
                     <span class="fw-bold text-success"><?php echo formatCurrency($goal['current_amount']); ?></span>
